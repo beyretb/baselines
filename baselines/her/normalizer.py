@@ -24,10 +24,12 @@ class Normalizer:
         self.default_clip_range = default_clip_range
         self.sess = sess if sess is not None else tf.get_default_session()
 
+        # numpy arrays for sum, sum of squared and the number of elements in the arrays
         self.local_sum = np.zeros(self.size, np.float32)
         self.local_sumsq = np.zeros(self.size, np.float32)
         self.local_count = np.zeros(1, np.float32)
 
+        # create equivalent variable tensors as well as the mean and standard dev once
         self.sum_tf = tf.get_variable(
             initializer=tf.zeros_initializer(), shape=self.local_sum.shape, name='sum',
             trainable=False, dtype=tf.float32)
@@ -43,15 +45,21 @@ class Normalizer:
         self.std = tf.get_variable(
             initializer=tf.ones_initializer(), shape=(self.size,), name='std',
             trainable=False, dtype=tf.float32)
+
+        # define tf placeholders for the inputs
         self.count_pl = tf.placeholder(name='count_pl', shape=(1,), dtype=tf.float32)
         self.sum_pl = tf.placeholder(name='sum_pl', shape=(self.size,), dtype=tf.float32)
         self.sumsq_pl = tf.placeholder(name='sumsq_pl', shape=(self.size,), dtype=tf.float32)
 
+        # define operations for adding observations to the current sum, sumsq and counter
         self.update_op = tf.group(
             self.count_tf.assign_add(self.count_pl),
             self.sum_tf.assign_add(self.sum_pl),
             self.sumsq_tf.assign_add(self.sumsq_pl)
         )
+
+        # define operattions to recompute the mean and std from the new observations, making sure
+        # the standard deviation doesn t go below the treshold epsilon
         self.recompute_op = tf.group(
             tf.assign(self.mean, self.sum_tf / self.count_tf),
             tf.assign(self.std, tf.sqrt(tf.maximum(
@@ -59,6 +67,8 @@ class Normalizer:
                 self.sumsq_tf / self.count_tf - tf.square(self.sum_tf / self.count_tf)
             ))),
         )
+
+        # create a lock for threading
         self.lock = threading.Lock()
 
     def update(self, v):

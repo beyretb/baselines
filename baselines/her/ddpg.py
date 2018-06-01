@@ -108,7 +108,7 @@ class DDPG(object):
 
     def get_actions(self, o, ag, g, noise_eps=0., random_eps=0., use_target_net=False,
                     compute_Q=False):
-        o, g = self._preprocess_og(o, ag, g)
+        o, g = self._preprocess_og(o, ag, g) # clip observations and goals
         policy = self.target if use_target_net else self.main
         # values to compute
         vals = [policy.pi_tf]
@@ -121,12 +121,15 @@ class DDPG(object):
             policy.u_tf: np.zeros((o.size // self.dimo, self.dimu), dtype=np.float32)
         }
 
+        # ret = action given by the current policy (eval of NN)
         ret = self.sess.run(vals, feed_dict=feed)
         # action postprocessing
         u = ret[0]
         noise = noise_eps * self.max_u * np.random.randn(*u.shape)  # gaussian noise
         u += noise
         u = np.clip(u, -self.max_u, self.max_u)
+        # Below: for each mini-batch we take action u (the one given by the policy) with probability
+        # 1-random_eps, and a random action (u + random_action - u) with probability random_eps
         u += np.random.binomial(1, random_eps, u.shape[0]).reshape(-1, 1) * (self._random_action(u.shape[0]) - u)  # eps-greedy
         if u.shape[0] == 1:
             u = u[0]
