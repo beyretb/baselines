@@ -31,6 +31,9 @@ class ActorCritic:
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 
         # Networks.
+        # Q_pi_tf: represents the Q network used for training the actor mu from the paper
+        # pi_tf: actor based on Q_pi_tf
+        # Q_tf: the critic, represents Q from the paper
         with tf.variable_scope('pi'):
             self.pi_tf = self.max_u * tf.tanh(nn(
                 input_pi, [self.hidden] * self.layers + [self.dimu]))

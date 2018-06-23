@@ -55,6 +55,7 @@ class DDPG(object):
             self.clip_return = np.inf
 
         self.create_actor_critic = import_function(self.network_class)
+        self.create_e_network = import_function(self.e_network_class)
 
         input_shapes = dims_to_shapes(self.input_dims)
         self.dimo = self.input_dims['o']
@@ -256,6 +257,7 @@ class DDPG(object):
             if reuse:
                 vs.reuse_variables()
             self.main = self.create_actor_critic(batch_tf, net_type='main', **self.__dict__)
+            self.e_network = self.create_e_network(batch_tf, **self.__dict__)
             vs.reuse_variables()
         with tf.variable_scope('target') as vs:
             if reuse:
