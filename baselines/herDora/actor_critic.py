@@ -1,5 +1,5 @@
 import tensorflow as tf
-from baselines.her.util import store_args, nn
+from baselines.herDora.util import store_args, nn
 
 
 class ActorCritic:

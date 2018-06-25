@@ -1,10 +1,11 @@
 import tensorflow as tf
-from baselines.her.util import store_args
+from baselines.herDora.util import store_args
 
 
 class ENetwork:
     @store_args
-    def __init__(self,inputs_tf):
+    def __init__(self, inputs_tf, dimo, dimg, dimu, max_u, o_stats, g_stats, hidden, layers,
+                 **kwargs):
 
         """ The E Network for continuous case, adapted from https://arxiv.org/abs/1804.04012
 
@@ -23,16 +24,17 @@ class ENetwork:
         with tf.variable_scope('E'):
             # for critic training
             input = tf.concat(axis=1, values=[o, g, self.u_tf / self.max_u])
-            for i, size in enumerate(self.layers - 1):
+            for i in range(self.layers - 1):
                 input = tf.layers.dense(inputs=input,
                                         units=self.hidden,
                                         kernel_initializer=tf.contrib.layers.xavier_initializer(),
-                                        reuse=True,
                                         name='_' + str(i))
                 input = tf.nn.relu(input)
             input = tf.layers.dense(inputs=input,
                                     units=1,
                                     kernel_initializer=tf.zeros_initializer(),
-                                    reuse=True,
                                     name='_' + str(self.layers))
-            self.Q_tf = tf.nn.tanh(input)
+            self.E_tf = tf.nn.tanh(input)
+
+            # TODO: problem is that we need a placeholder for the target for the loss, ie target should be an inference
+            # of E(s_t+1, a_t+1). Problem is that we don t store a_t+1 in the buffer, which is needed here...

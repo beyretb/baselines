@@ -5,10 +5,10 @@ import tensorflow as tf
 from tensorflow.contrib.staging import StagingArea
 
 from baselines import logger
-from baselines.her.util import (
+from baselines.herDora.util import (
     import_function, store_args, flatten_grads, transitions_in_episode_batch)
-from baselines.her.normalizer import Normalizer
-from baselines.her.replay_buffer import ReplayBuffer
+from baselines.herDora.normalizer import Normalizer
+from baselines.herDora.replay_buffer import ReplayBuffer
 from baselines.common.mpi_adam import MpiAdam
 
 
@@ -257,7 +257,7 @@ class DDPG(object):
             if reuse:
                 vs.reuse_variables()
             self.main = self.create_actor_critic(batch_tf, net_type='main', **self.__dict__)
-            self.e_network = self.create_e_network(batch_tf, **self.__dict__)
+            self.e_network = self.create_e_network(batch_tf, net_type='main', **self.__dict__)
             vs.reuse_variables()
         with tf.variable_scope('target') as vs:
             if reuse:
@@ -301,7 +301,7 @@ class DDPG(object):
         self.Q_grad_tf = flatten_grads(grads=Q_grads_tf, var_list=self._vars('main/Q'))
         self.pi_grad_tf = flatten_grads(grads=pi_grads_tf, var_list=self._vars('main/pi'))
 
-        # optimizers (using MPI for parralel updates of the network (TO CONFIRM))
+        # optimizers (using MPI for parallel updates of the network (TO CONFIRM))
         self.Q_adam = MpiAdam(self._vars('main/Q'), scale_grad_by_procs=False)
         self.pi_adam = MpiAdam(self._vars('main/pi'), scale_grad_by_procs=False)
 
@@ -316,6 +316,9 @@ class DDPG(object):
         self.update_target_net_op = list(
             map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
                 zip(self.target_vars, self.main_vars)))
+
+        # E-values loss function
+        self.E_loss_tf = tf.reduce_mean(tf.square())
 
         # initialize all variables
         tf.variables_initializer(self._global_vars('')).run()

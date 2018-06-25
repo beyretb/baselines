@@ -2,8 +2,8 @@ import numpy as np
 import gym
 
 from baselines import logger
-from baselines.her.ddpg import DDPG
-from baselines.her.her import make_sample_her_transitions
+from baselines.herDora.ddpg import DDPG
+from baselines.herDora.her import make_sample_her_transitions
 
 
 DEFAULT_ENV_PARAMS = {
@@ -20,7 +20,7 @@ DEFAULT_PARAMS = {
     'layers': 3,  # number of layers in the critic/actor networks
     'hidden': 256,  # number of neurons in each hidden layers
     'network_class': 'baselines.her.actor_critic:ActorCritic',
-    'e_network_class': 'baselines.herDora.e_network:ENetwork'
+    'e_network_class': 'baselines.herDora.e_network:ENetwork',
     'Q_lr': 0.001,  # critic learning rate
     'pi_lr': 0.001,  # actor learning rate
     'buffer_size': int(1E6),  # for experience replay
@@ -85,6 +85,7 @@ def prepare_params(kwargs):
         del kwargs['lr']
     for name in ['buffer_size', 'hidden', 'layers',
                  'network_class',
+                 'e_network_class',
                  'polyak',
                  'batch_size', 'Q_lr', 'pi_lr',
                  'norm_eps', 'norm_clip', 'max_u',
