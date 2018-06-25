@@ -35,6 +35,3 @@ class ENetwork:
                                     kernel_initializer=tf.zeros_initializer(),
                                     name='_' + str(self.layers))
             self.E_tf = tf.nn.tanh(input)
-
-            # TODO: problem is that we need a placeholder for the target for the loss, ie target should be an inference
-            # of E(s_t+1, a_t+1). Problem is that we don t store a_t+1 in the buffer, which is needed here...

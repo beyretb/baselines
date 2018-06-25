@@ -257,7 +257,7 @@ class DDPG(object):
             if reuse:
                 vs.reuse_variables()
             self.main = self.create_actor_critic(batch_tf, net_type='main', **self.__dict__)
-            self.e_network = self.create_e_network(batch_tf, net_type='main', **self.__dict__)
+            self.main_e = self.create_e_network(batch_tf, net_type='main', **self.__dict__)
             vs.reuse_variables()
         with tf.variable_scope('target') as vs:
             if reuse:
@@ -266,6 +266,8 @@ class DDPG(object):
             target_batch_tf['o'] = batch_tf['o_2']
             target_batch_tf['g'] = batch_tf['g_2']
             self.target = self.create_actor_critic(
+                target_batch_tf, net_type='target', **self.__dict__)
+            self.target_e = self.create_e_network(
                 target_batch_tf, net_type='target', **self.__dict__)
             vs.reuse_variables()
         assert len(self._vars("main")) == len(self._vars("target"))
@@ -282,6 +284,10 @@ class DDPG(object):
         # loss function for Q_tf where we exclude target_tf from the gradient computation:
         self.Q_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))
 
+        # loss function for the E values
+        target_e_tf = self.gamma_e*self.target_e.E_tf
+        self.E_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_e_tf) - self.main_e.E_tf))
+
         # loss function for the action policy is that of the main Q_pi network:
         self.pi_loss_tf = -tf.reduce_mean(self.main.Q_pi_tf)
         # add L2 regularization term from the policy itself:
@@ -292,6 +298,7 @@ class DDPG(object):
         pi_grads_tf = tf.gradients(self.pi_loss_tf, self._vars('main/pi'))
         assert len(self._vars('main/Q')) == len(Q_grads_tf)
         assert len(self._vars('main/pi')) == len(pi_grads_tf)
+        # TODO: add gradients for E-values ??
 
         # zip the gradients together with their respective variables
         self.Q_grads_vars_tf = zip(Q_grads_tf, self._vars('main/Q'))
@@ -303,22 +310,28 @@ class DDPG(object):
 
         # optimizers (using MPI for parallel updates of the network (TO CONFIRM))
         self.Q_adam = MpiAdam(self._vars('main/Q'), scale_grad_by_procs=False)
+        self.E_adam = MpiAdam(self._vars('main/E'), scale_grad_by_procs=False)
         self.pi_adam = MpiAdam(self._vars('main/pi'), scale_grad_by_procs=False)
 
         # polyak averaging used for the update of the target networks in both pi and Q nets
         self.main_vars = self._vars('main/Q') + self._vars('main/pi')
         self.target_vars = self._vars('target/Q') + self._vars('target/pi')
         self.stats_vars = self._global_vars('o_stats') + self._global_vars('g_stats')
+        self.e_main_vars = self._vars('main/E')
+        self.e_target_vars = self._vars('target/E')
         # operation to initialize the target nets at the main nets'values
         self.init_target_net_op = list(
             map(lambda v: v[0].assign(v[1]), zip(self.target_vars, self.main_vars)))
+        self.init_e_target_net_op = list(
+            map(lambda v: v[0].assign(v[1]), zip(self.e_target_vars, self.e_main_vars)))
         # operation to update the target nets from the main nets using polyak averaging
         self.update_target_net_op = list(
             map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
                 zip(self.target_vars, self.main_vars)))
+        self.update_e_target_net_op = list(
+            map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
+                zip(self.e_target_vars, self.e_main_vars)))
 
-        # E-values loss function
-        self.E_loss_tf = tf.reduce_mean(tf.square())
 
         # initialize all variables
         tf.variables_initializer(self._global_vars('')).run()

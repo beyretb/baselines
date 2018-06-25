@@ -45,7 +45,7 @@ DEFAULT_PARAMS = {
     # normalization
     'norm_eps': 0.01,  # epsilon used for observation normalization
     'norm_clip': 5,  # normalized observations are cropped to this values
-    'gamma_E': 0.99 # discount coefficient for E values updates
+    'gamma_e': 0.99 # discount coefficient for E values updates
 }
 
 
@@ -88,7 +88,7 @@ def prepare_params(kwargs):
                  'e_network_class',
                  'polyak',
                  'batch_size', 'Q_lr', 'pi_lr',
-                 'norm_eps', 'norm_clip', 'max_u',
+                 'norm_eps', 'norm_clip', 'max_u', 'gamma_e',
                  'action_l2', 'clip_obs', 'scope', 'relative_goals']:
         ddpg_params[name] = kwargs[name]
         kwargs['_' + name] = kwargs[name]
