@@ -176,11 +176,12 @@ class DDPG(object):
 
     def _grads(self):
         # Avoid feed_dict here for performance!
-        critic_loss, actor_loss, Q_grad, pi_grad = self.sess.run([
+        critic_loss, actor_loss, Q_grad, pi_grad, E_loss = self.sess.run([
             self.Q_loss_tf,
             self.main.Q_pi_tf,
             self.Q_grad_tf,
-            self.pi_grad_tf
+            self.pi_grad_tf,
+            self.E_loss_tf
         ])
         return critic_loss, actor_loss, Q_grad, pi_grad
 
@@ -212,10 +213,10 @@ class DDPG(object):
         return critic_loss, actor_loss
 
     def _init_target_net(self):
-        self.sess.run(self.init_target_net_op)
+        self.sess.run([self.init_target_net_op, self.init_e_target_net_op])
 
     def update_target_net(self):
-        self.sess.run(self.update_target_net_op)
+        self.sess.run([self.update_target_net_op, self.update_e_target_net_op])
 
     def clear_buffer(self):
         self.buffer.clear_buffer()
@@ -277,16 +278,20 @@ class DDPG(object):
         # self.XX.Q_pi_tf is the Q network used to train this policy
         # self.XX.Q_tf
 
-        target_Q_pi_tf = self.target.Q_pi_tf
-        clip_range = (-self.clip_return, 0. if self.clip_pos_returns else np.inf)
-        # target y_i= r + gamma*Q part of the Bellman equation (with returns clipped if necessary:
-        target_tf = tf.clip_by_value(batch_tf['r'] + self.gamma * target_Q_pi_tf, *clip_range)
-        # loss function for Q_tf where we exclude target_tf from the gradient computation:
-        self.Q_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))
-
         # loss function for the E values
         target_e_tf = self.gamma_e*self.target_e.E_tf
         self.E_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_e_tf) - self.main_e.E_tf))
+
+        # loss function for Q
+        target_Q_pi_tf = self.target.Q_pi_tf
+        clip_range = (-self.clip_return, 0. if self.clip_pos_returns else np.inf)
+        # target y_i= r + gamma*Q part of the Bellman equation (with returns clipped if necessary) + DORA term:
+        # target_tf = tf.clip_by_value(batch_tf['r'] + tf.divide(0.05, tf.sqrt(-tf.log(target_e_tf))) +
+         #                            self.gamma * target_Q_pi_tf, *clip_range)
+        target_tf = tf.clip_by_value(batch_tf['r'] + self.gamma * target_Q_pi_tf, *clip_range)
+        # loss function for Q_tf where we exclude target_tf from the gradient computation:
+        self.Q_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))
+        self.Q_loss_tf = tf.Print(self.Q_loss_tf, [self.Q_loss_tf], 'Q_loss_tf')
 
         # loss function for the action policy is that of the main Q_pi network:
         self.pi_loss_tf = -tf.reduce_mean(self.main.Q_pi_tf)

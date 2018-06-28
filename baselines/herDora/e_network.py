@@ -34,4 +34,6 @@ class ENetwork:
                                     units=1,
                                     kernel_initializer=tf.zeros_initializer(),
                                     name='_' + str(self.layers))
-            self.E_tf = tf.nn.tanh(input)
+            out = tf.nn.sigmoid(input)
+             # self.E_tf = tf.Print(out, [out], 'E_net: ', summarize=20)
+            self.E_tf = out
