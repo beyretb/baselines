@@ -174,6 +174,7 @@ class DDPG(object):
     def _sync_optimizers(self):
         self.Q_adam.sync()
         self.pi_adam.sync()
+        self.E_adam.sync()
 
     def _grads(self):
         # Avoid feed_dict here for performance!
