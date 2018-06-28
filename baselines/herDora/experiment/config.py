@@ -88,7 +88,7 @@ def prepare_params(kwargs):
                  'e_network_class',
                  'polyak',
                  'batch_size', 'Q_lr', 'pi_lr',
-                 'norm_eps', 'norm_clip', 'max_u', 'gamma_e',
+                 'norm_eps', 'norm_clip', 'max_u', 'gamma_e', 'debug',
                  'action_l2', 'clip_obs', 'scope', 'relative_goals']:
         ddpg_params[name] = kwargs[name]
         kwargs['_' + name] = kwargs[name]

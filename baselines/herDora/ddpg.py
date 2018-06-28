@@ -3,6 +3,7 @@ from collections import OrderedDict
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.staging import StagingArea
+from tensorflow.python import debug as tf_debug
 
 from baselines import logger
 from baselines.herDora.util import (
@@ -21,7 +22,7 @@ class DDPG(object):
     def __init__(self, input_dims, buffer_size, hidden, layers, network_class, polyak, batch_size,
                  Q_lr, pi_lr, norm_eps, norm_clip, max_u, action_l2, clip_obs, scope, T,
                  rollout_batch_size, subtract_goals, relative_goals, clip_pos_returns, clip_return,
-                 sample_transitions, gamma, reuse=False, **kwargs):
+                 sample_transitions, gamma, debug, reuse=False, **kwargs):
         """Implementation of DDPG that is used in combination with Hindsight Experience Replay (HER).
 
         Args:
@@ -176,18 +177,20 @@ class DDPG(object):
 
     def _grads(self):
         # Avoid feed_dict here for performance!
-        critic_loss, actor_loss, Q_grad, pi_grad, E_loss = self.sess.run([
+        critic_loss, actor_loss, E_loss, Q_grad, pi_grad, E_grad = self.sess.run([
             self.Q_loss_tf,
             self.main.Q_pi_tf,
+            self.E_loss_tf,
             self.Q_grad_tf,
             self.pi_grad_tf,
-            self.E_loss_tf
+            self.E_grad_tf
         ])
-        return critic_loss, actor_loss, Q_grad, pi_grad
+        return critic_loss, actor_loss, E_loss, Q_grad, pi_grad, E_grad
 
-    def _update(self, Q_grad, pi_grad):
+    def _update(self, Q_grad, pi_grad, E_grad):
         self.Q_adam.update(Q_grad, self.Q_lr)
         self.pi_adam.update(pi_grad, self.pi_lr)
+        self.E_adam.update(E_grad, self.Q_lr)         # TODO: check if need an E-learning rate ??
 
     def sample_batch(self):
         transitions = self.buffer.sample(self.batch_size)
@@ -208,8 +211,8 @@ class DDPG(object):
     def train(self, stage=True):
         if stage:
             self.stage_batch()
-        critic_loss, actor_loss, Q_grad, pi_grad = self._grads()
-        self._update(Q_grad, pi_grad)
+            critic_loss, actor_loss, E_loss, Q_grad, pi_grad, E_grad = self._grads()
+        self._update(Q_grad, pi_grad, E_grad)
         return critic_loss, actor_loss
 
     def _init_target_net(self):
@@ -236,6 +239,8 @@ class DDPG(object):
         self.sess = tf.get_default_session()
         if self.sess is None:
             self.sess = tf.InteractiveSession()
+            if self.debug:
+                self.sess = tf_debug.LocalCLIDebugWrapperSession(self.sess)
 
         # running averages
         with tf.variable_scope('o_stats') as vs:
@@ -286,12 +291,11 @@ class DDPG(object):
         target_Q_pi_tf = self.target.Q_pi_tf
         clip_range = (-self.clip_return, 0. if self.clip_pos_returns else np.inf)
         # target y_i= r + gamma*Q part of the Bellman equation (with returns clipped if necessary) + DORA term:
-        # target_tf = tf.clip_by_value(batch_tf['r'] + tf.divide(0.05, tf.sqrt(-tf.log(target_e_tf))) +
-         #                            self.gamma * target_Q_pi_tf, *clip_range)
-        target_tf = tf.clip_by_value(batch_tf['r'] + self.gamma * target_Q_pi_tf, *clip_range)
+        target_tf = tf.clip_by_value(batch_tf['r'] + tf.divide(0.05, tf.sqrt(-tf.log(target_e_tf))) +
+                                    self.gamma * target_Q_pi_tf, *clip_range)
+        #target_tf = tf.clip_by_value(batch_tf['r'] + self.gamma * target_Q_pi_tf, *clip_range)
         # loss function for Q_tf where we exclude target_tf from the gradient computation:
         self.Q_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))
-        self.Q_loss_tf = tf.Print(self.Q_loss_tf, [self.Q_loss_tf], 'Q_loss_tf')
 
         # loss function for the action policy is that of the main Q_pi network:
         self.pi_loss_tf = -tf.reduce_mean(self.main.Q_pi_tf)
@@ -301,17 +305,20 @@ class DDPG(object):
         # define the gradients of the Q_loss and pi_loss wrt to their variables respectively
         Q_grads_tf = tf.gradients(self.Q_loss_tf, self._vars('main/Q'))
         pi_grads_tf = tf.gradients(self.pi_loss_tf, self._vars('main/pi'))
+        E_grads_tf = tf.gradients(self.E_loss_tf, self._vars('main/E'))
         assert len(self._vars('main/Q')) == len(Q_grads_tf)
         assert len(self._vars('main/pi')) == len(pi_grads_tf)
-        # TODO: add gradients for E-values ??
+        assert len(self._vars('main/E')) == len(E_grads_tf)
 
         # zip the gradients together with their respective variables
         self.Q_grads_vars_tf = zip(Q_grads_tf, self._vars('main/Q'))
         self.pi_grads_vars_tf = zip(pi_grads_tf, self._vars('main/pi'))
+        self.E_grads_vars_tf = zip(E_grads_tf, self._vars('main/E'))
 
         # flattened gradients and variables
         self.Q_grad_tf = flatten_grads(grads=Q_grads_tf, var_list=self._vars('main/Q'))
         self.pi_grad_tf = flatten_grads(grads=pi_grads_tf, var_list=self._vars('main/pi'))
+        self.E_grad_tf = flatten_grads(grads=E_grads_tf, var_list=self._vars('main/E'))
 
         # optimizers (using MPI for parallel updates of the network (TO CONFIRM))
         self.Q_adam = MpiAdam(self._vars('main/Q'), scale_grad_by_procs=False)

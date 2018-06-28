@@ -83,7 +83,7 @@ def train(policy, rollout_worker, evaluator,
 
 
 def launch(
-    env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return,
+    env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return, debug,
     override_params={}, save_policies=True
 ):
     # Fork for multi-CPU MPI implementation.
@@ -118,6 +118,7 @@ def launch(
     params = config.DEFAULT_PARAMS
     params['env_name'] = env
     params['replay_strategy'] = replay_strategy
+    params['debug'] = debug
     if env in config.DEFAULT_ENV_PARAMS:
         params.update(config.DEFAULT_ENV_PARAMS[env])  # merge env-specific parameters in
     params.update(**override_params)  # makes it possible to override any parameter
@@ -183,6 +184,7 @@ def launch(
 @click.option('--policy_save_interval', type=int, default=5, help='the interval with which policy pickles are saved. If set to 0, only the best and latest policy will be pickled.')
 @click.option('--replay_strategy', type=click.Choice(['future', 'none']), default='future', help='the HER replay strategy to be used. "future" uses HER, "none" disables HER.')
 @click.option('--clip_return', type=int, default=1, help='whether or not returns should be clipped')
+@click.option('--debug', is_flag=True, help='run with tfdbg mode')
 def main(**kwargs):
     launch(**kwargs)
 
