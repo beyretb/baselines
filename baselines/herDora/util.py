@@ -11,6 +11,10 @@ import numpy as np
 from baselines.common import tf_util as U
 
 
+def filter_E_values(datum, tensor):
+  # A filter that detects zero-valued scalars.
+  return 'target/E' in datum.tensor_name
+
 def store_args(method):
     """Stores provided method args as instance attributes.
     """

@@ -7,7 +7,7 @@ from tensorflow.python import debug as tf_debug
 
 from baselines import logger
 from baselines.herDora.util import (
-    import_function, store_args, flatten_grads, transitions_in_episode_batch)
+    import_function, store_args, flatten_grads, transitions_in_episode_batch, filter_E_values)
 from baselines.herDora.normalizer import Normalizer
 from baselines.herDora.replay_buffer import ReplayBuffer
 from baselines.common.mpi_adam import MpiAdam
@@ -242,6 +242,7 @@ class DDPG(object):
             self.sess = tf.InteractiveSession()
             if self.debug:
                 self.sess = tf_debug.LocalCLIDebugWrapperSession(self.sess)
+                self.sess.add_tensor_filter('filter_E_values', filter_E_values)
 
         # running averages
         with tf.variable_scope('o_stats') as vs:
