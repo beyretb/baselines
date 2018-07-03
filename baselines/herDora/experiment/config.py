@@ -45,7 +45,7 @@ DEFAULT_PARAMS = {
     # normalization
     'norm_eps': 0.01,  # epsilon used for observation normalization
     'norm_clip': 5,  # normalized observations are cropped to this values
-    'gamma_e': 0.99 # discount coefficient for E values updates
+    'gamma_e': 0.9 # discount coefficient for E values updates
 }
 
 
