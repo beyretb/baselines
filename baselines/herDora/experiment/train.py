@@ -26,7 +26,7 @@ def mpi_average(value):
 
 def train(policy, rollout_worker, evaluator,
           n_epochs, n_test_rollouts, n_cycles, n_batches, policy_save_interval,
-          save_policies, **kwargs):
+          save_policies, client=None, **kwargs):
     rank = MPI.COMM_WORLD.Get_rank()
 
     latest_policy_path = os.path.join(logger.get_dir(), 'policy_latest.pkl')
@@ -83,7 +83,7 @@ def train(policy, rollout_worker, evaluator,
 
 
 def launch(
-    env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return, debug,
+    env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return, debug, fb,
     override_params={}, save_policies=True
 ):
     # Fork for multi-CPU MPI implementation.
@@ -103,7 +103,7 @@ def launch(
     # Configure logging
     if rank == 0:
         if logdir or logger.get_dir() is None:
-            logger.configure(dir=logdir)
+            logger.configure(dir=logdir, fb=fb)
     else:
         logger.configure()
     logdir = logger.get_dir()
@@ -185,6 +185,7 @@ def launch(
 @click.option('--replay_strategy', type=click.Choice(['future', 'none']), default='future', help='the HER replay strategy to be used. "future" uses HER, "none" disables HER.')
 @click.option('--clip_return', type=int, default=1, help='whether or not returns should be clipped')
 @click.option('--debug', is_flag=True, help='run with tfdbg mode')
+@click.option('--fb', is_flag=True, help='log progress with facebook bot')
 def main(**kwargs):
     launch(**kwargs)
 

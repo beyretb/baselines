@@ -37,7 +37,7 @@ class HumanOutputFormat(KVWriter, SeqWriter):
             self.file = filename_or_file
             self.own_file = False
 
-    def writekvs(self, kvs):
+    def writekvs(self, kvs, client=None):
         # Create strings for printing
         key2str = {}
         for (key, val) in sorted(kvs.items()):
@@ -66,10 +66,13 @@ class HumanOutputFormat(KVWriter, SeqWriter):
                 ' ' * (valwidth - len(val)),
             ))
         lines.append(dashes)
-        self.file.write('\n'.join(lines) + '\n')
+        if client is None: # TODO: remove for submission !!!!!!!!!!!!!!!!!!! (used for fb bot)
+            self.file.write('\n'.join(lines) + '\n')
+            # Flush the output to the file
+            self.file.flush()
+        else:
+            bot_facebook_send(client, '\n'.join(lines) + '\n')
 
-        # Flush the output to the file
-        self.file.flush()
 
     def _truncate(self, s):
         return s[:20] + '...' if len(s) > 23 else s
@@ -300,6 +303,7 @@ class Logger(object):
         self.level = INFO
         self.dir = dir
         self.output_formats = output_formats
+        self.client= None
 
     # Logging API, forwarded
     # ----------------------------------------
@@ -319,6 +323,8 @@ class Logger(object):
         for fmt in self.output_formats:
             if isinstance(fmt, KVWriter):
                 fmt.writekvs(self.name2val)
+        if self.client is not None:
+            self.output_formats[0].writekvs(self.name2val, self.client)
         self.name2val.clear()
         self.name2cnt.clear()
 
@@ -347,7 +353,7 @@ class Logger(object):
 
 Logger.DEFAULT = Logger.CURRENT = Logger(dir=None, output_formats=[HumanOutputFormat(sys.stdout)])
 
-def configure(dir=None, format_strs=None):
+def configure(dir=None, format_strs=None, fb=False):
     if dir is None:
         dir = os.getenv('OPENAI_LOGDIR')
     if dir is None:
@@ -374,6 +380,9 @@ def configure(dir=None, format_strs=None):
 
     Logger.CURRENT = Logger(dir=dir, output_formats=output_formats)
     log('Logging to %s'%dir)
+
+    if fb:
+        Logger.CURRENT.client = bot_facebook_start()
 
 def reset():
     if Logger.CURRENT is not Logger.DEFAULT:
@@ -476,3 +485,23 @@ def read_tb(path):
 
 if __name__ == "__main__":
     _demo()
+
+try:
+    from fbchat import Client
+    from fbchat.models import *
+
+    def bot_facebook_start():
+        client=None
+        i=0
+        while client is None and i<2:
+            client = Client('inhandmonitoro@gmail.com', 'ElMonitoro1$')
+            i+=1
+        if client is not None:
+            print('successfully connected to facebook account')
+        return client
+
+    def bot_facebook_send(client, message):
+        client.send(Message(message), thread_id=546356619, thread_type=ThreadType.USER)
+
+except:
+    print('fbchat not installed')
