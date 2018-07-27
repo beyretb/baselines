@@ -1,6 +1,6 @@
 import os
 import sys
-
+sys.path.append('/home/ben/archived_projects/src/herdora/')
 import click
 import numpy as np
 import json

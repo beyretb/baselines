@@ -2,8 +2,8 @@ import numpy as np
 import gym
 
 from baselines import logger
-from baselines.her.ddpg import DDPG
-from baselines.her.her import make_sample_her_transitions
+from baselines.herSimple.ddpg import DDPG
+from baselines.herSimple.her import make_sample_her_transitions
 
 
 DEFAULT_ENV_PARAMS = {
@@ -95,9 +95,9 @@ def prepare_params(kwargs):
     return kwargs
 
 
-def log_params(params, logger=logger):
-    for key in sorted(params.keys()):
-        logger.info('{}: {}'.format(key, params[key]))
+# def log_params(params, logger=logger):
+#     for key in sorted(params.keys()):
+#         logger.info('{}: {}'.format(key, params[key]))
 
 
 def configure_her(params):

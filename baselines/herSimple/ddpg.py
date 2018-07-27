@@ -5,10 +5,10 @@ import tensorflow as tf
 from tensorflow.contrib.staging import StagingArea
 
 from baselines import logger
-from baselines.her.util import (
+from baselines.herSimple.util import (
     import_function, store_args, flatten_grads, transitions_in_episode_batch)
-from baselines.her.normalizer import Normalizer
-from baselines.her.replay_buffer import ReplayBuffer
+from baselines.herSimple.normalizer import Normalizer
+from baselines.herSimple.replay_buffer import ReplayBuffer
 from baselines.common.mpi_adam import MpiAdam
 
 
@@ -169,9 +169,9 @@ class DDPG(object):
     def get_current_buffer_size(self):
         return self.buffer.get_current_size()
 
-    def _sync_optimizers(self):
-        self.Q_adam.sync()
-        self.pi_adam.sync()
+    # def _sync_optimizers(self):
+    #     self.Q_adam.sync()
+    #     self.pi_adam.sync()
 
     def _grads(self):
         # Avoid feed_dict here for performance!
@@ -206,9 +206,15 @@ class DDPG(object):
     def train(self, stage=True):
         if stage:
             self.stage_batch()
-        critic_loss, actor_loss, Q_grad, pi_grad = self._grads()
-        self._update(Q_grad, pi_grad)
-        print(critic_loss)
+        critic_loss, actor_loss, _, _ = self.sess.run([
+            self.Q_loss_tf,
+            self.main.Q_pi_tf,
+            self.optimize_pi,
+            self.optimize_Q
+        ])
+        # critic_loss, actor_loss, Q_grad, pi_grad = self._grads()
+        # self._update(Q_grad, pi_grad)
+        # print(critic_loss)
         return critic_loss, actor_loss
 
     def _init_target_net(self):
@@ -296,13 +302,17 @@ class DDPG(object):
         self.Q_grads_vars_tf = zip(Q_grads_tf, self._vars('main/Q'))
         self.pi_grads_vars_tf = zip(pi_grads_tf, self._vars('main/pi'))
 
-        # flattened gradients and variables
-        self.Q_grad_tf = flatten_grads(grads=Q_grads_tf, var_list=self._vars('main/Q'))
-        self.pi_grad_tf = flatten_grads(grads=pi_grads_tf, var_list=self._vars('main/pi'))
+        # # flattened gradients and variables
+        # self.Q_grad_tf = flatten_grads(grads=Q_grads_tf, var_list=self._vars('main/Q'))
+        # self.pi_grad_tf = flatten_grads(grads=pi_grads_tf, var_list=self._vars('main/pi'))
+        #
+        # # optimizers (using MPI for parralel updates of the network (TO CONFIRM))
+        # self.Q_adam = MpiAdam(self._vars('main/Q'), scale_grad_by_procs=False)
+        # self.pi_adam = MpiAdam(self._vars('main/pi'), scale_grad_by_procs=False)
 
-        # optimizers (using MPI for parralel updates of the network (TO CONFIRM))
-        self.Q_adam = MpiAdam(self._vars('main/Q'), scale_grad_by_procs=False)
-        self.pi_adam = MpiAdam(self._vars('main/pi'), scale_grad_by_procs=False)
+        self.optimize_Q = tf.train.AdamOptimizer(self.Q_lr).apply_gradients(self.Q_grads_vars_tf)
+        self.optimize_pi = tf.train.AdamOptimizer(self.pi_lr).apply_gradients(self.pi_grads_vars_tf)
+
 
         # polyak averaging used for the update of the target networks in both pi and Q nets
         self.main_vars = self._vars('main/Q') + self._vars('main/pi')
@@ -318,20 +328,20 @@ class DDPG(object):
 
         # initialize all variables
         tf.variables_initializer(self._global_vars('')).run()
-        self._sync_optimizers()  # CHECK WHAT THIS DOES ????
+        # self._sync_optimizers()  # CHECK WHAT THIS DOES ????
         self._init_target_net()
 
-    def logs(self, prefix=''):
-        logs = []
-        logs += [('stats_o/mean', np.mean(self.sess.run([self.o_stats.mean])))]
-        logs += [('stats_o/std', np.mean(self.sess.run([self.o_stats.std])))]
-        logs += [('stats_g/mean', np.mean(self.sess.run([self.g_stats.mean])))]
-        logs += [('stats_g/std', np.mean(self.sess.run([self.g_stats.std])))]
-
-        if prefix is not '' and not prefix.endswith('/'):
-            return [(prefix + '/' + key, val) for key, val in logs]
-        else:
-            return logs
+    # def logs(self, prefix=''):
+    #     logs = []
+    #     logs += [('stats_o/mean', np.mean(self.sess.run([self.o_stats.mean])))]
+    #     logs += [('stats_o/std', np.mean(self.sess.run([self.o_stats.std])))]
+    #     logs += [('stats_g/mean', np.mean(self.sess.run([self.g_stats.mean])))]
+    #     logs += [('stats_g/std', np.mean(self.sess.run([self.g_stats.std])))]
+    #
+    #     if prefix is not '' and not prefix.endswith('/'):
+    #         return [(prefix + '/' + key, val) for key, val in logs]
+    #     else:
+    #         return logs
 
     def __getstate__(self):
         """Our policies can be loaded from pkl, but after unpickling you cannot continue training.
