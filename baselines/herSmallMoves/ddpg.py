@@ -107,6 +107,16 @@ class DDPG(object):
         g = np.clip(g, -self.clip_obs, self.clip_obs)
         return o, g
 
+    def _preprocess_sg(self, ag, g):
+        # if self.relative_goals:
+        #     g_shape = g.shape
+        #     g = g.reshape(-1, self.dimg)
+        #     ag = ag.reshape(-1, self.dimg)
+        #     g = self.subtract_goals(g, ag)
+        #     g = g.reshape(*g_shape)
+        ag = np.clip(ag, -self.clip_obs, self.clip_obs)
+        return ag,
+
     def get_actions(self, o, ag, g, noise_eps=0., random_eps=0., use_target_net=False,
                     compute_Q=False):
         o, g = self._preprocess_og(o, ag, g) # clip observations and goals
@@ -148,6 +158,8 @@ class DDPG(object):
                        'o' is of size T+1, others are of size T
         """
 
+        # TODO: add sg and ag to the statistics ???
+
         self.buffer.store_episode(episode_batch)
 
         if update_stats:
@@ -170,41 +182,60 @@ class DDPG(object):
     def get_current_buffer_size(self):
         return self.buffer.get_current_size()
 
-    def get_subgoal(self, o, ag, g, goals_noise_eps=0.,goals_random_eps=0.):
+    def get_subgoal(self, ag, g, goals_noise_eps=0., goals_random_eps=0.):
 
-        noise = goals_noise_eps * np.random.randn(*g.shape)  # gaussian noise
-        ret = ag + noise
-        # TODO: clip goals to stay reachable
+        if np.random.randint()<goals_random_eps:
+            sg = ag+self._UONoise()
+        else:
+            ag = self._preprocess_sg(ag, g)  # clip observations and goals
+            policy = self.target_G
+            vals = [policy.pi_tf]
+            feed = {
+                policy.g_tf: g.reshape(-1, self.dimg),
+                policy.ag_tf: ag.reshape(-1, self.dimg),
+                policy.sg_tf: np.zeros((g.size // self.dimg, self.dimg), dtype=np.float32)
+            }
+            sg = self.sess.run(vals, feed_dict=feed)
+            noise = goals_noise_eps * np.random.randn(*g.shape)
+            sg += noise
+        sg = np.clip(sg, -self.clip_obs, self.clip_obs)
+        return sg
 
-        return ret
-
-
-
+    def _UONoise(self):
+        theta = 0.15
+        sigma = 0.2
+        state = np.zeros(self.dimg)
+        while True:
+            yield state
+            state += 0.1*(-theta * state + sigma * np.random.randn(self.dimg))
 
     # def _sync_optimizers(self):
     #     self.Q_adam.sync()
     #     self.pi_adam.sync()
 
-    def _grads(self):
-        # Avoid feed_dict here for performance!
-        critic_loss, actor_loss, Q_grad, pi_grad = self.sess.run([
-            self.Q_loss_tf,
-            self.main.Q_pi_tf,
-            self.Q_grad_tf,
-            self.pi_grad_tf
-        ])
-        return critic_loss, actor_loss, Q_grad, pi_grad
-
-    def _update(self, Q_grad, pi_grad):
-        self.Q_adam.update(Q_grad, self.Q_lr)
-        self.pi_adam.update(pi_grad, self.pi_lr)
+    # def _grads(self):
+    #     # Avoid feed_dict here for performance!
+    #     critic_loss, actor_loss, Q_grad, pi_grad = self.sess.run([
+    #         self.Q_loss_tf,
+    #         self.main.Q_pi_tf,
+    #         self.Q_grad_tf,
+    #         self.pi_grad_tf
+    #     ])
+    #     return critic_loss, actor_loss, Q_grad, pi_grad
+    #
+    # def _update(self, Q_grad, pi_grad):
+    #     self.Q_adam.update(Q_grad, self.Q_lr)
+    #     self.pi_adam.update(pi_grad, self.pi_lr)
 
     def sample_batch(self):
         transitions = self.buffer.sample(self.batch_size)
         o, o_2, g = transitions['o'], transitions['o_2'], transitions['g']
         ag, ag_2 = transitions['ag'], transitions['ag_2']
+        sg, sg_2 = transitions['sg'], transitions['sg_2']
         transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
         transitions['o_2'], transitions['g_2'] = self._preprocess_og(o_2, ag_2, g)
+        transitions['sg'] = self._preprocess_sg(sg,g)
+        transitions['sg_2'] = self._preprocess_sg(sg_2,g)
 
         transitions_batch = [transitions[key] for key in self.stage_shapes.keys()]
         return transitions_batch
@@ -224,6 +255,12 @@ class DDPG(object):
             self.optimize_pi,
             self.optimize_Q
         ])
+        critic_loss_G, actor_loss_G, _, _ = self.sess.run([
+            self.Q_loss_G_tf,
+            self.main_G.Q_pi_tf,
+            self.optimize_pi_G,
+            self.optimize_Q_G
+        ])
         # critic_loss, actor_loss, Q_grad, pi_grad = self._grads()
         # self._update(Q_grad, pi_grad)
         # print(critic_loss)
@@ -231,9 +268,11 @@ class DDPG(object):
 
     def _init_target_net(self):
         self.sess.run(self.init_target_net_op)
+        self.sess.run(self.init_target_G_net_op)
 
     def update_target_net(self):
         self.sess.run(self.update_target_net_op)
+        self.sess.run(self.update_target_G_net_op)
 
     def clear_buffer(self):
         self.buffer.clear_buffer()
@@ -357,9 +396,9 @@ class DDPG(object):
         self.main_G_vars = self._vars('main_G/Q') + self._vars('main_G/pi')
         self.target_G_vars = self._vars('target_G/Q') + self._vars('target_G/pi')
         self.stats_G_vars = self._global_vars('g_stats')
-        self.init_target_net_op = list(
+        self.init_target_G_net_op = list(
             map(lambda v: v[0].assign(v[1]), zip(self.target_G_vars, self.main_G_vars)))
-        self.update_target_net_op = list(
+        self.update_target_G_net_op = list(
             map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
                 zip(self.target_G_vars, self.main_G_vars)))
 
