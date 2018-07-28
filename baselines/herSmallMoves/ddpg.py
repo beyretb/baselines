@@ -54,6 +54,7 @@ class DDPG(object):
             self.clip_return = np.inf
 
         self.create_actor_critic = import_function(self.network_class)
+        self.create_actor_critic_goals = import_function(self.goals_network_class)
 
         input_shapes = dims_to_shapes(self.input_dims)
         self.dimo = self.input_dims['o']
@@ -66,9 +67,10 @@ class DDPG(object):
             if key.startswith('info_'):
                 continue
             stage_shapes[key] = (None, *input_shapes[key])
-        for key in ['o', 'g']:
+        for key in ['o', 'g', 'ag']:
             stage_shapes[key + '_2'] = stage_shapes[key]
         stage_shapes['r'] = (None,)
+        stage_shapes['rg'] = (None,)
         self.stage_shapes = stage_shapes
 
         # Create network.
@@ -170,7 +172,11 @@ class DDPG(object):
 
     def get_subgoal(self, o, ag, g, goals_noise_eps=0.,goals_random_eps=0.):
 
-        return g
+        noise = goals_noise_eps * np.random.randn(*g.shape)  # gaussian noise
+        ret = ag + noise
+        # TODO: clip goals to stay reachable
+
+        return ret
 
 
 
@@ -263,8 +269,10 @@ class DDPG(object):
         batch_tf = OrderedDict([(key, batch[i])
                                 for i, key in enumerate(self.stage_shapes.keys())])
         batch_tf['r'] = tf.reshape(batch_tf['r'], [-1, 1])
+        batch_tf['rg'] = tf.reshape(batch_tf['rg'], [-1, 1])
 
-        # networks
+        # ================== Q network ===============================================================
+
         with tf.variable_scope('main') as vs:
             if reuse:
                 vs.reuse_variables()
@@ -276,66 +284,89 @@ class DDPG(object):
             target_batch_tf = batch_tf.copy()
             target_batch_tf['o'] = batch_tf['o_2']
             target_batch_tf['g'] = batch_tf['g_2']
-            self.target = self.create_actor_critic(
-                target_batch_tf, net_type='target', **self.__dict__)
+            self.target = self.create_actor_critic(target_batch_tf, net_type='target', **self.__dict__)
             vs.reuse_variables()
         assert len(self._vars("main")) == len(self._vars("target"))
 
-        # loss functions
-        # self.XX.pi_tf is the action policy we ll use for exploration (TO CONFIRM)
-        # self.XX.Q_pi_tf is the Q network used to train this policy
-        # self.XX.Q_tf
-
         target_Q_pi_tf = self.target.Q_pi_tf
         clip_range = (-self.clip_return, 0. if self.clip_pos_returns else np.inf)
-        # target y_i= r + gamma*Q part of the Bellman equation (with returns clipped if necessary:
         target_tf = tf.clip_by_value(batch_tf['r'] + self.gamma * target_Q_pi_tf, *clip_range)
-        # loss function for Q_tf where we exclude target_tf from the gradient computation:
         self.Q_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))
 
-        # loss function for the action policy is that of the main Q_pi network:
         self.pi_loss_tf = -tf.reduce_mean(self.main.Q_pi_tf)
-        # add L2 regularization term from the policy itself:
         self.pi_loss_tf += self.action_l2 * tf.reduce_mean(tf.square(self.main.pi_tf / self.max_u))
 
-        # define the gradients of the Q_loss and pi_loss wrt to their variables respectively
         Q_grads_tf = tf.gradients(self.Q_loss_tf, self._vars('main/Q'))
         pi_grads_tf = tf.gradients(self.pi_loss_tf, self._vars('main/pi'))
         assert len(self._vars('main/Q')) == len(Q_grads_tf)
         assert len(self._vars('main/pi')) == len(pi_grads_tf)
 
-        # zip the gradients together with their respective variables
         self.Q_grads_vars_tf = zip(Q_grads_tf, self._vars('main/Q'))
         self.pi_grads_vars_tf = zip(pi_grads_tf, self._vars('main/pi'))
-
-        # # flattened gradients and variables
-        # self.Q_grad_tf = flatten_grads(grads=Q_grads_tf, var_list=self._vars('main/Q'))
-        # self.pi_grad_tf = flatten_grads(grads=pi_grads_tf, var_list=self._vars('main/pi'))
-        #
-        # # optimizers (using MPI for parralel updates of the network (TO CONFIRM))
-        # self.Q_adam = MpiAdam(self._vars('main/Q'), scale_grad_by_procs=False)
-        # self.pi_adam = MpiAdam(self._vars('main/pi'), scale_grad_by_procs=False)
 
         self.optimize_Q = tf.train.AdamOptimizer(self.Q_lr).apply_gradients(self.Q_grads_vars_tf)
         self.optimize_pi = tf.train.AdamOptimizer(self.pi_lr).apply_gradients(self.pi_grads_vars_tf)
 
-
-        # polyak averaging used for the update of the target networks in both pi and Q nets
         self.main_vars = self._vars('main/Q') + self._vars('main/pi')
         self.target_vars = self._vars('target/Q') + self._vars('target/pi')
         self.stats_vars = self._global_vars('o_stats') + self._global_vars('g_stats')
-        # operation to initialize the target nets at the main nets'values
         self.init_target_net_op = list(
             map(lambda v: v[0].assign(v[1]), zip(self.target_vars, self.main_vars)))
-        # operation to update the target nets from the main nets using polyak averaging
         self.update_target_net_op = list(
             map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
                 zip(self.target_vars, self.main_vars)))
 
-        # initialize all variables
         tf.variables_initializer(self._global_vars('')).run()
-        # self._sync_optimizers()  # CHECK WHAT THIS DOES ????
         self._init_target_net()
+
+        # ================== G network ===============================================================
+
+        with tf.variable_scope('main_G') as vs:
+            if reuse:
+                vs.reuse_variables()
+            self.main_G = self.create_actor_critic_goals(batch_tf, net_type='main_G', **self.__dict__)
+            vs.reuse_variables()
+        with tf.variable_scope('target_G') as vs:
+            if reuse:
+                vs.reuse_variables()
+            target_batch_tf = batch_tf.copy()
+            target_batch_tf['g'] = batch_tf['g_2']
+            target_batch_tf['ag'] = batch_tf['ag_2']
+            self.target_G = self.create_actor_critic_goals(target_batch_tf, net_type='target_G', **self.__dict__)
+            vs.reuse_variables()
+        assert len(self._vars("main_G")) == len(self._vars("target_G"))
+
+        target_G_Q_pi_tf = self.target_G.Q_pi_tf
+        target_G_tf = tf.clip_by_value(batch_tf['rg'] + self.gamma * target_G_Q_pi_tf, *clip_range)
+        self.Q_loss_G_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_G_tf) - self.main_G.Q_tf))
+
+        self.pi_loss_G_tf = -tf.reduce_mean(self.main_G.Q_pi_tf)
+        self.pi_loss_G_tf += self.action_l2 * tf.reduce_mean(tf.square(self.main_G.pi_tf))
+
+        Q_grads_G_tf = tf.gradients(self.Q_loss_G_tf, self._vars('main_G/Q'))
+        pi_grads_G_tf = tf.gradients(self.pi_loss_G_tf, self._vars('main_G/pi'))
+        assert len(self._vars('main_G/Q')) == len(Q_grads_G_tf)
+        assert len(self._vars('main_G/pi')) == len(pi_grads_G_tf)
+
+        self.Q_grads_vars_G_tf = zip(Q_grads_G_tf, self._vars('main_G/Q'))
+        self.pi_grads_vars_G_tf = zip(pi_grads_G_tf, self._vars('main_G/pi'))
+
+        self.optimize_Q_G = tf.train.AdamOptimizer(self.Q_lr).apply_gradients(self.Q_grads_vars_G_tf)
+        self.optimize_pi_G = tf.train.AdamOptimizer(self.pi_lr).apply_gradients(self.pi_grads_vars_G_tf)
+
+        self.main_G_vars = self._vars('main_G/Q') + self._vars('main_G/pi')
+        self.target_G_vars = self._vars('target_G/Q') + self._vars('target_G/pi')
+        self.stats_G_vars = self._global_vars('g_stats')
+        self.init_target_net_op = list(
+            map(lambda v: v[0].assign(v[1]), zip(self.target_G_vars, self.main_G_vars)))
+        self.update_target_net_op = list(
+            map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
+                zip(self.target_G_vars, self.main_G_vars)))
+
+        tf.variables_initializer(self._global_vars('')).run()
+        self._init_target_net()
+
+        # =============================================================================================
 
     # def logs(self, prefix=''):
     #     logs = []
