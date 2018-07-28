@@ -4,7 +4,7 @@ import numpy as np
 import pickle
 from mujoco_py import MujocoException
 
-from baselines.herSimple.util import convert_episode_to_batch_major, store_args
+from baselines.herSmallMoves.util import convert_episode_to_batch_major, store_args
 
 
 class RolloutWorker:
@@ -70,79 +70,92 @@ class RolloutWorker:
         # compute observations
         o = np.empty((self.rollout_batch_size, self.dims['o']), np.float32)  # observations
         ag = np.empty((self.rollout_batch_size, self.dims['g']), np.float32)  # achieved goals
+        sg = np.empty((self.rollout_batch_size, self.dims['g']), np.float32)
         o[:] = self.initial_o
         ag[:] = self.initial_ag
+        sg[:] = self.policy.get_subgoal(o, ag, self.g,
+                           goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
+                           goals_random_eps=self.goals_random_eps if not self.exploit else 0.)
 
         # generate episodes
-        obs, achieved_goals, acts, goals, successes = [], [], [], [], []
+        obs, achieved_goals, acts, goals, subgoals, successes = [], [], [], [], [], []
         info_values = [np.empty((self.T, self.rollout_batch_size, self.dims['info_' + key]), np.float32) for key in self.info_keys]
         Qs = []
-        for t in range(self.T):
 
-            policy_output = self.policy.get_actions(
-                o, ag, self.g,
-                compute_Q=self.compute_Q,
-                noise_eps=self.noise_eps if not self.exploit else 0.,
-                random_eps=self.random_eps if not self.exploit else 0.,
-                use_target_net=self.use_target_net)
+        for n in range(self.n_subgoals):
 
-            if self.compute_Q:
-                u, Q = policy_output
-                Qs.append(Q)
-            else:
-                u = policy_output
+            for t_sub in range(self.n_steps_per_subgoal):
 
-            if u.ndim == 1:
-                # The non-batched case should still have a reasonable shape.
-                u = u.reshape(1, -1)
+                t = n*self.n_subgoals+t_sub
 
-            o_new = np.empty((self.rollout_batch_size, self.dims['o']))
-            ag_new = np.empty((self.rollout_batch_size, self.dims['g']))
-            success = np.zeros(self.rollout_batch_size)
-            # compute new states and observations
-            for i in range(self.rollout_batch_size):
-                try:
-                    # We fully ignore the reward here because it will have to be re-computed
-                    # for HER.
-                    curr_o_new, _, _, info = self.envs[i].step(u[i])
-                    if 'is_success' in info:
-                        success[i] = info['is_success']
-                    o_new[i] = curr_o_new['observation']
-                    ag_new[i] = curr_o_new['achieved_goal']
-                    for idx, key in enumerate(self.info_keys):
-                        info_values[idx][t, i] = info[key]
-                    if self.render:
-                        self.envs[i].render()
-                except MujocoException as e:
-                    return self.generate_rollouts()
+                policy_output = self.policy.get_actions(
+                    o, ag, sg,
+                    compute_Q=self.compute_Q,
+                    noise_eps=self.noise_eps if not self.exploit else 0.,
+                    random_eps=self.random_eps if not self.exploit else 0.,
+                    use_target_net=self.use_target_net)
 
-            if np.isnan(o_new).any():
-                self.logger.warning('NaN caught during rollout generation. Trying again...')
-                self.reset_all_rollouts()
-                return self.generate_rollouts()
+                if self.compute_Q:
+                    u, Q = policy_output
+                    Qs.append(Q)
+                else:
+                    u = policy_output
+                if u.ndim == 1:
+                    # The non-batched case should still have a reasonable shape.
+                    u = u.reshape(1, -1)
+                o_new = np.empty((self.rollout_batch_size, self.dims['o']))
+                ag_new = np.empty((self.rollout_batch_size, self.dims['g']))
+                success = np.zeros(self.rollout_batch_size)
+                for i in range(self.rollout_batch_size):
+                    try:
+                        # We fully ignore the reward here because it will have to be re-computed
+                        # for HER.
+                        curr_o_new, _, _, info = self.envs[i].step(u[i])
+                        if 'is_success' in info:
+                            success[i] = info['is_success']
+                        o_new[i] = curr_o_new['observation']
+                        ag_new[i] = curr_o_new['achieved_goal']
+                        for idx, key in enumerate(self.info_keys):
+                            info_values[idx][t, i] = info[key]
+                        if self.render:
+                            self.envs[i].render()
+                    except MujocoException as e:
+                        return self.generate_rollouts()
 
-            obs.append(o.copy())
-            achieved_goals.append(ag.copy())
-            successes.append(success.copy())
-            acts.append(u.copy())
-            goals.append(self.g.copy())
-            o[...] = o_new
-            ag[...] = ag_new
+                    if np.isnan(o_new).any():
+                        self.logger.warning('NaN caught during rollout generation. Trying again...')
+                        self.reset_all_rollouts()
+                        return self.generate_rollouts()
+                obs.append(o.copy())
+                achieved_goals.append(ag.copy())
+                successes.append(success.copy())
+                acts.append(u.copy())
+                goals.append(self.g.copy())
+                subgoals.append(sg.copy())
+                o[...] = o_new
+                ag[...] = ag_new
+
+            sg[:] = self.policy.get_subgoal(o, ag, self.g,
+                               goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
+                               goals_random_eps=self.goals_random_eps if not self.exploit else 0.)
+
         obs.append(o.copy())
         achieved_goals.append(ag.copy())
+        # subgoals.append(sg.copy())
         self.initial_o[:] = o
 
         episode = dict(o=obs,
                        u=acts,
                        g=goals,
-                       ag=achieved_goals)
+                       ag=achieved_goals,
+                       sg=subgoals)
         for key, value in zip(self.info_keys, info_values):
             episode['info_{}'.format(key)] = value
 
         # stats
         successful = np.array(successes)[-1, :]
         assert successful.shape == (self.rollout_batch_size,)
-        success_rate = np.mean(successful)
+        success_rate = np.mean(successful)  # TODO: Watch out here, success will log any subgoal reached, and not g
         self.success_history.append(success_rate)
         if self.compute_Q:
             self.Q_history.append(np.mean(Qs))

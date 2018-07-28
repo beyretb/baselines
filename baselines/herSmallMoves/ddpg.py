@@ -5,11 +5,10 @@ import tensorflow as tf
 from tensorflow.contrib.staging import StagingArea
 
 from baselines import logger
-from baselines.herSimple.util import (
-    import_function, store_args, flatten_grads, transitions_in_episode_batch)
-from baselines.herSimple.normalizer import Normalizer
-from baselines.herSimple.replay_buffer import ReplayBuffer
-from baselines.common.mpi_adam import MpiAdam
+from baselines.herSmallMoves.util import (
+    import_function, store_args, transitions_in_episode_batch)
+from baselines.herSmallMoves.normalizer import Normalizer
+from baselines.herSmallMoves.replay_buffer import ReplayBuffer
 
 
 def dims_to_shapes(input_dims):
@@ -168,6 +167,13 @@ class DDPG(object):
 
     def get_current_buffer_size(self):
         return self.buffer.get_current_size()
+
+    def get_subgoal(self, o, ag, g, goals_noise_eps=0.,goals_random_eps=0.):
+
+        return g
+
+
+
 
     # def _sync_optimizers(self):
     #     self.Q_adam.sync()

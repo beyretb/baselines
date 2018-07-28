@@ -9,8 +9,8 @@ from mpi4py import MPI
 from baselines import logger
 from baselines.common import set_global_seeds
 from baselines.common.mpi_moments import mpi_moments
-import baselines.herSimple.experiment.config as config
-from baselines.herSimple.rollout import RolloutWorker
+import baselines.herSmallMoves.experiment.config as config
+from baselines.herSmallMoves.rollout import RolloutWorker
 # from baselines.her.util import mpi_fork
 #
 # from subprocess import CalledProcessError
@@ -154,7 +154,8 @@ def launch(env, n_epochs, replay_strategy, clip_return,override_params={}, save_
         'T': params['T'],
     }
 
-    for name in ['T', 'rollout_batch_size', 'gamma', 'noise_eps', 'random_eps']:
+    for name in ['T', 'rollout_batch_size', 'gamma', 'noise_eps', 'random_eps',
+                 'goals_noise_eps', 'goals_random_eps', 'n_subgoals', 'n_steps_per_subgoal']:
         rollout_params[name] = params[name]
         eval_params[name] = params[name]
 

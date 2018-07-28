@@ -47,11 +47,11 @@ def import_function(spec):
     return fn
 
 
-def flatten_grads(var_list, grads):
-    """Flattens a variables and their gradients.
-    """
-    return tf.concat([tf.reshape(grad, [U.numel(v)])
-                      for (v, grad) in zip(var_list, grads)], 0)
+# def flatten_grads(var_list, grads):
+#     """Flattens a variables and their gradients.
+#     """
+#     return tf.concat([tf.reshape(grad, [U.numel(v)])
+#                       for (v, grad) in zip(var_list, grads)], 0)
 
 
 def nn(input, layers_sizes, reuse=None, flatten=False, name=""):
@@ -85,30 +85,30 @@ def install_mpi_excepthook():
     sys.excepthook = new_hook
 
 
-def mpi_fork(n, extra_mpi_args=[]):
-    """Re-launches the current script with workers
-    Returns "parent" for original parent, "child" for MPI children
-    """
-    if n <= 1:
-        return "child"
-    if os.getenv("IN_MPI") is None:
-        env = os.environ.copy()
-        env.update(
-            MKL_NUM_THREADS="1",
-            OMP_NUM_THREADS="1",
-            IN_MPI="1"
-        )
-        # "-bind-to core" is crucial for good performance
-        args = ["mpirun", "-np", str(n)] + \
-            extra_mpi_args + \
-            [sys.executable]
-
-        args += sys.argv
-        subprocess.check_call(args, env=env)
-        return "parent"
-    else:
-        install_mpi_excepthook()
-        return "child"
+# def mpi_fork(n, extra_mpi_args=[]):
+#     """Re-launches the current script with workers
+#     Returns "parent" for original parent, "child" for MPI children
+#     """
+#     if n <= 1:
+#         return "child"
+#     if os.getenv("IN_MPI") is None:
+#         env = os.environ.copy()
+#         env.update(
+#             MKL_NUM_THREADS="1",
+#             OMP_NUM_THREADS="1",
+#             IN_MPI="1"
+#         )
+#         # "-bind-to core" is crucial for good performance
+#         args = ["mpirun", "-np", str(n)] + \
+#             extra_mpi_args + \
+#             [sys.executable]
+#
+#         args += sys.argv
+#         subprocess.check_call(args, env=env)
+#         return "parent"
+#     else:
+#         install_mpi_excepthook()
+#         return "child"
 
 
 def convert_episode_to_batch_major(episode):

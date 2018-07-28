@@ -2,8 +2,8 @@ import numpy as np
 import gym
 
 from baselines import logger
-from baselines.herSimple.ddpg import DDPG
-from baselines.herSimple.her import make_sample_her_transitions
+from baselines.herSmallMoves.ddpg import DDPG
+from baselines.herSmallMoves.her import make_sample_her_transitions
 
 
 DEFAULT_ENV_PARAMS = {
@@ -35,9 +35,12 @@ DEFAULT_PARAMS = {
     'batch_size': 256,  # per mpi thread, measured in transitions and reduced to even multiple of chunk_length.
     'n_test_rollouts': 10,  # number of test rollouts per epoch, each consists of rollout_batch_size rollouts
     'test_with_polyak': False,  # run test episodes with the target network
+    'n_subgoals': 5,  # number of subgoals for an episode
     # exploration
     'random_eps': 0.3,  # percentage of time a random action is taken
-    'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of max_u
+    'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of
+    'goals_random_eps': 1,  # percentage of time a subgoal is selected randomly vs selected from the G-network
+    'goals_noise_eps': 0.2,  # std deviation of gaussian noise added to current ag to obtain next g
     # HER
     'replay_strategy': 'future',  # supported modes: future, none
     'replay_k': 4,  # number of additional goals used for replay, only used if off_policy_data=future
@@ -74,6 +77,11 @@ def prepare_params(kwargs):
     tmp_env = cached_make_env(kwargs['make_env'])
     assert hasattr(tmp_env, '_max_episode_steps')
     kwargs['T'] = tmp_env._max_episode_steps
+    if kwargs['T']%kwargs['n_subgoals']==0:
+        kwargs['n_steps_per_subgoal'] = int(kwargs['T']/kwargs['n_subgoals'])
+    else:
+        raise ValueError('Espisode length {} is not a multiple of the number of subgoals {}'.
+                         format(kwargs['T'],kwargs['n_subgoals']))
     tmp_env.reset()
     kwargs['max_u'] = np.array(kwargs['max_u']) if isinstance(kwargs['max_u'], list) else kwargs['max_u']
     kwargs['gamma'] = 1. - 1. / kwargs['T']
@@ -139,6 +147,7 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
     env.reset()
     ddpg_params.update({'input_dims': input_dims,  # agent takes an input observations
                         'T': params['T'],
+                        'n_steps_per_subgoal': params['n_steps_per_subgoal'],
                         'clip_pos_returns': True,  # clip positive returns
                         'clip_return': (1. / (1. - gamma)) if clip_return else np.inf,  # max abs of return
                         'rollout_batch_size': rollout_batch_size,
@@ -162,6 +171,7 @@ def configure_dims(params):
         'o': obs['observation'].shape[0],
         'u': env.action_space.shape[0],
         'g': obs['desired_goal'].shape[0],
+        'sg': obs['desired_goal'].shape[0]
     }
     for key, value in info.items():
         value = np.array(value)
