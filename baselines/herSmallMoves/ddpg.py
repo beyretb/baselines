@@ -84,6 +84,9 @@ class DDPG(object):
 
             self._create_network(reuse=reuse)
 
+        self.goal_noise = self._UONoise()
+        next(self.goal_noise)
+
         # Configure the replay buffer.
         buffer_shapes = {key: (self.T if key != 'o' else self.T+1, *input_shapes[key])
                          for key, val in input_shapes.items()}
@@ -184,10 +187,10 @@ class DDPG(object):
 
     def get_subgoal(self, ag, g, goals_noise_eps=0., goals_random_eps=0.):
 
-        if np.random.randint()<goals_random_eps:
-            sg = ag+self._UONoise()
+        if np.random.rand() < goals_random_eps:
+            sg = ag+next(self.goal_noise)
         else:
-            ag = self._preprocess_sg(ag, g)  # clip observations and goals
+            ag = self._preprocess_sg(ag, g)  # clip goals
             policy = self.target_G
             vals = [policy.pi_tf]
             feed = {
@@ -231,11 +234,11 @@ class DDPG(object):
         transitions = self.buffer.sample(self.batch_size)
         o, o_2, g = transitions['o'], transitions['o_2'], transitions['g']
         ag, ag_2 = transitions['ag'], transitions['ag_2']
-        sg, sg_2 = transitions['sg'], transitions['sg_2']
+        sg = transitions['sg']
         transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
         transitions['o_2'], transitions['g_2'] = self._preprocess_og(o_2, ag_2, g)
         transitions['sg'] = self._preprocess_sg(sg,g)
-        transitions['sg_2'] = self._preprocess_sg(sg_2,g)
+        # transitions['sg_2'] = self._preprocess_sg(sg_2,g)
 
         transitions_batch = [transitions[key] for key in self.stage_shapes.keys()]
         return transitions_batch
@@ -354,9 +357,6 @@ class DDPG(object):
         self.update_target_net_op = list(
             map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
                 zip(self.target_vars, self.main_vars)))
-
-        tf.variables_initializer(self._global_vars('')).run()
-        self._init_target_net()
 
         # ================== G network ===============================================================
 

@@ -74,7 +74,7 @@ class RolloutWorker:
         o[:] = self.initial_o
         ag[:] = self.initial_ag
         if self.n_subgoals>1:
-            sg[:] = self.policy.get_subgoal(o, ag, self.g,
+            sg[:] = self.policy.get_subgoal(ag, self.g,
                                goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
                                goals_random_eps=self.goals_random_eps if not self.exploit else 0.)
         else:
@@ -88,7 +88,7 @@ class RolloutWorker:
 
             for t_sub in range(self.n_steps_per_subgoal):
 
-                t = n*self.n_subgoals+t_sub
+                t = n*self.n_steps_per_subgoal+t_sub
 
                 policy_output = self.policy.get_actions(
                     o, ag, sg,
@@ -138,10 +138,10 @@ class RolloutWorker:
                 ag[...] = ag_new
 
             # Sample new subgoal, making sure that the last subgoal is the actual goal
-            if n == self.n_subgoals - 1:
+            if n == self.n_subgoals - 2:
                 sg = self.g.copy()
             else:
-                sg[:] = self.policy.get_subgoal(o, ag, self.g,
+                sg[:] = self.policy.get_subgoal(ag, self.g,
                                goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
                                goals_random_eps=self.goals_random_eps if not self.exploit else 0.)
 

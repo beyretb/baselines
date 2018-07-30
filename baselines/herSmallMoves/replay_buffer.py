@@ -46,6 +46,7 @@ class ReplayBuffer:
 
         buffers['o_2'] = buffers['o'][:, 1:, :]
         buffers['ag_2'] = buffers['ag'][:, 1:, :]
+        buffers['ag_2'] = buffers['ag'][:, 1:, :]
 
         transitions = self.sample_transitions(buffers, batch_size)
 
