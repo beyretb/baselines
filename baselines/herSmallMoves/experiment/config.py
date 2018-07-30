@@ -36,7 +36,7 @@ DEFAULT_PARAMS = {
     'batch_size': 256,  # per mpi thread, measured in transitions and reduced to even multiple of chunk_length.
     'n_test_rollouts': 10,  # number of test rollouts per epoch, each consists of rollout_batch_size rollouts
     'test_with_polyak': False,  # run test episodes with the target network
-    'n_subgoals': 5,  # number of subgoals for an episode (WARNING: n_subgoals==1 means no subgoal, just end goal)
+    'n_subgoals': 2,  # number of subgoals for an episode (WARNING: n_subgoals==1 means no subgoal, just end goal)
     # exploration
     'random_eps': 0.3,  # percentage of time a random action is taken
     'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of
@@ -117,9 +117,13 @@ def configure_her(params):
     def reward_fun(ag_2, g, info):  # vectorized
         return env.compute_reward(achieved_goal=ag_2, desired_goal=g, info=info)
 
+    def reward_function_subgoals(ag_2, sg, info):  # vectorized
+        return env.compute_reward(achieved_goal=ag_2, desired_goal=sg, info=info)
+
     # Prepare configuration for HER.
     her_params = {
-        'reward_fun': reward_fun,
+        # 'reward_fun': reward_fun, # reward function for regular HER
+        'reward_fun':reward_function_subgoals,  # same but for subgoals
     }
     for name in ['replay_strategy', 'replay_k']:
         her_params[name] = params[name]
@@ -156,6 +160,7 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
                         'subtract_goals': simple_goal_subtract,
                         'sample_transitions': sample_her_transitions,
                         'gamma': gamma,
+                        'n_subgoals': params['n_subgoals']
                         })
     ddpg_params['info'] = {
         'env_name': params['env_name'],

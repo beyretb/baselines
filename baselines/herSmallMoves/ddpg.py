@@ -94,7 +94,7 @@ class DDPG(object):
         buffer_shapes['ag'] = (self.T+1, self.dimg)
 
         buffer_size = (self.buffer_size // self.rollout_batch_size) * self.rollout_batch_size
-        self.buffer = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions)
+        self.buffer = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions, self.n_subgoals)
 
     def _random_action(self, n):
         return np.random.uniform(low=-self.max_u, high=self.max_u, size=(n, self.dimu))
@@ -110,15 +110,9 @@ class DDPG(object):
         g = np.clip(g, -self.clip_obs, self.clip_obs)
         return o, g
 
-    def _preprocess_sg(self, ag, g):
-        # if self.relative_goals:
-        #     g_shape = g.shape
-        #     g = g.reshape(-1, self.dimg)
-        #     ag = ag.reshape(-1, self.dimg)
-        #     g = self.subtract_goals(g, ag)
-        #     g = g.reshape(*g_shape)
-        ag = np.clip(ag, -self.clip_obs, self.clip_obs)
-        return ag,
+    def _preprocess_sg(self, g):
+        g = np.clip(g, -self.clip_obs, self.clip_obs)
+        return g
 
     def get_actions(self, o, ag, g, noise_eps=0., random_eps=0., use_target_net=False,
                     compute_Q=False):
@@ -170,7 +164,7 @@ class DDPG(object):
             episode_batch['o_2'] = episode_batch['o'][:, 1:, :]
             episode_batch['ag_2'] = episode_batch['ag'][:, 1:, :]
             num_normalizing_transitions = transitions_in_episode_batch(episode_batch)
-            transitions = self.sample_transitions(episode_batch, num_normalizing_transitions)
+            transitions = self.sample_transitions(episode_batch, num_normalizing_transitions, self.n_subgoals)
 
             o, o_2, g, ag = transitions['o'], transitions['o_2'], transitions['g'], transitions['ag']
             transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
@@ -190,7 +184,7 @@ class DDPG(object):
         if np.random.rand() < goals_random_eps:
             sg = ag+next(self.goal_noise)
         else:
-            ag = self._preprocess_sg(ag, g)  # clip goals
+            ag = self._preprocess_sg(ag)  # clip goals
             policy = self.target_G
             vals = [policy.pi_tf]
             feed = {
@@ -237,8 +231,9 @@ class DDPG(object):
         sg = transitions['sg']
         transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
         transitions['o_2'], transitions['g_2'] = self._preprocess_og(o_2, ag_2, g)
-        transitions['sg'] = self._preprocess_sg(sg,g)
+        transitions['sg'] = self._preprocess_sg(sg)
         # transitions['sg_2'] = self._preprocess_sg(sg_2,g)
+        transitions['rg'] = transitions['r']
 
         transitions_batch = [transitions[key] for key in self.stage_shapes.keys()]
         return transitions_batch
@@ -258,15 +253,13 @@ class DDPG(object):
             self.optimize_pi,
             self.optimize_Q
         ])
-        critic_loss_G, actor_loss_G, _, _ = self.sess.run([
-            self.Q_loss_G_tf,
-            self.main_G.Q_pi_tf,
-            self.optimize_pi_G,
-            self.optimize_Q_G
-        ])
-        # critic_loss, actor_loss, Q_grad, pi_grad = self._grads()
-        # self._update(Q_grad, pi_grad)
-        # print(critic_loss)
+        # critic_loss_G, actor_loss_G, _, _ = self.sess.run([
+        #     self.Q_loss_G_tf,
+        #     self.main_G.Q_pi_tf,
+        #     self.optimize_pi_G,
+        #     self.optimize_Q_G
+        # ])
+
         return critic_loss, actor_loss
 
     def _init_target_net(self):

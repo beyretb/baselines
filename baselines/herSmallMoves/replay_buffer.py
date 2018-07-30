@@ -4,7 +4,7 @@ import numpy as np
 
 
 class ReplayBuffer:
-    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions):
+    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions, n_subgoals):
         """Creates a replay buffer.
 
         Args:
@@ -13,11 +13,13 @@ class ReplayBuffer:
             size_in_transitions (int): the size of the buffer, measured in transitions
             T (int): the time horizon for episodes
             sample_transitions (function): a function that samples from the replay buffer
+            n_subgoals: number of subgoals
         """
         self.buffer_shapes = buffer_shapes
         self.size = size_in_transitions // T
         self.T = T
         self.sample_transitions = sample_transitions
+        self.n_subgoals = n_subgoals
 
         # self.buffers is {key: array(size_in_episodes x T or T+1 x dim_key)}
         self.buffers = {key: np.empty([self.size, *shape])
@@ -48,7 +50,7 @@ class ReplayBuffer:
         buffers['ag_2'] = buffers['ag'][:, 1:, :]
         buffers['ag_2'] = buffers['ag'][:, 1:, :]
 
-        transitions = self.sample_transitions(buffers, batch_size)
+        transitions = self.sample_transitions(buffers, batch_size, self.n_subgoals)
 
         for key in (['r', 'o_2', 'ag_2'] + list(self.buffers.keys())):
             assert key in transitions, "key %s missing from transitions" % key
