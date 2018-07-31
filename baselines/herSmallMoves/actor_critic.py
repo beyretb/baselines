@@ -22,7 +22,7 @@ class ActorCritic:
             layers (int): number of hidden layers
         """
         self.o_tf = inputs_tf['o']
-        self.g_tf = inputs_tf['sg']
+        self.g_tf = inputs_tf['sg']  # We now care about reaching subgoals
         self.u_tf = inputs_tf['u']
 
         # Prepare inputs for actor and critic.

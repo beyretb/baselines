@@ -49,6 +49,8 @@ def train(policy, rollout_worker, evaluator,
         for _ in range(n_test_rollouts):
             evaluator.generate_rollouts()
         print('Success rate: {}'.format(evaluator.current_success_rate()))
+        if evaluator.current_success_rate()>0.7:
+            evaluator.render=True
 
         # # record logs
         # logger.record_tabular('epoch', epoch)

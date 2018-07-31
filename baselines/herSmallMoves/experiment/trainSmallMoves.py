@@ -43,12 +43,15 @@ def train(policy, rollout_worker, evaluator,
             for _ in range(n_batches):
                 policy.train()
             policy.update_target_net()
+        print('Success rate: {}'.format(rollout_worker.current_success_rate()))
 
         # test
-        evaluator.clear_history()
-        for _ in range(n_test_rollouts):
-            evaluator.generate_rollouts()
-        print('Success rate: {}'.format(evaluator.current_success_rate()))
+        # evaluator.clear_history()
+        # for _ in range(n_test_rollouts):
+        #     evaluator.generate_rollouts()
+        # print('Success rate: {}'.format(evaluator.current_success_rate()))
+        # if evaluator.current_success_rate()>0.7:
+        #     evaluator.render=True
 
         # # record logs
         # logger.record_tabular('epoch', epoch)

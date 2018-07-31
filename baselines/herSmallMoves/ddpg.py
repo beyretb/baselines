@@ -84,6 +84,7 @@ class DDPG(object):
 
             self._create_network(reuse=reuse)
 
+        # self.goal_noise = self._GaussianNoise()
         self.goal_noise = self._UONoise()
         next(self.goal_noise)
 
@@ -205,6 +206,14 @@ class DDPG(object):
         while True:
             yield state
             state += 0.1*(-theta * state + sigma * np.random.randn(self.dimg))
+
+    def _GaussianNoise(self):
+        mean = 0.05
+        sigma = 0.2
+        state = np.zeros(self.dimg)
+        while True:
+            yield state
+            state = sigma * np.random.randn(self.dimg) + mean
 
     # def _sync_optimizers(self):
     #     self.Q_adam.sync()

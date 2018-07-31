@@ -80,12 +80,13 @@ class RolloutWorker:
         else:
             sg[:]=self.g
         # generate episodes
-        obs, achieved_goals, acts, goals, subgoals, successes = [], [], [], [], [], []
+        obs, achieved_goals, acts, goals, subgoals, successes_g, successes_sg, rewards = [], [], [], [], [], [], [], []
         info_values = [np.empty((self.T, self.rollout_batch_size, self.dims['info_' + key]), np.float32) for key in self.info_keys]
         Qs = []
 
         for n in range(self.n_subgoals):
 
+            success_sg = np.zeros(self.rollout_batch_size)
             for t_sub in range(self.n_steps_per_subgoal):
 
                 t = n*self.n_steps_per_subgoal+t_sub
@@ -107,16 +108,19 @@ class RolloutWorker:
                     u = u.reshape(1, -1)
                 o_new = np.empty((self.rollout_batch_size, self.dims['o']))
                 ag_new = np.empty((self.rollout_batch_size, self.dims['g']))
-                success = np.zeros(self.rollout_batch_size)
+                success_g = np.zeros(self.rollout_batch_size)
+                reward = np.zeros(self.rollout_batch_size)
                 for i in range(self.rollout_batch_size):
                     try:
                         # We fully ignore the reward here because it will have to be re-computed
                         # for HER.
                         curr_o_new, _, _, info = self.envs[i].step(u[i])
                         if 'is_success' in info:
-                            success[i] = info['is_success']
+                            success_g[i] = info['is_success']
                         o_new[i] = curr_o_new['observation']
                         ag_new[i] = curr_o_new['achieved_goal']
+                        reward[i] = self.envs[i].compute_reward(achieved_goal=ag_new[i], desired_goal=sg[i], info=info)
+                        success_sg[i] += reward[i]==0
                         for idx, key in enumerate(self.info_keys):
                             info_values[idx][t, i] = info[key]
                         if self.render:
@@ -130,13 +134,15 @@ class RolloutWorker:
                         return self.generate_rollouts()
                 obs.append(o.copy())
                 achieved_goals.append(ag.copy())
-                successes.append(success.copy())
+                successes_g.append(success_g.copy())
                 acts.append(u.copy())
                 goals.append(self.g.copy())
                 subgoals.append(sg.copy())
+                rewards.append(reward.copy())
                 o[...] = o_new
                 ag[...] = ag_new
 
+            successes_sg.append((success_sg>0).copy())
             # Sample new subgoal, making sure that the last subgoal is the actual goal
             if n == self.n_subgoals - 2:
                 sg = self.g.copy()
@@ -154,17 +160,22 @@ class RolloutWorker:
                        u=acts,
                        g=goals,
                        ag=achieved_goals,
-                       sg=subgoals)
+                       sg=subgoals,
+                       r = rewards)
         for key, value in zip(self.info_keys, info_values):
             episode['info_{}'.format(key)] = value
 
         # stats
-        successful = np.array(successes)[-1, :]
-        assert successful.shape == (self.rollout_batch_size,)
-        success_rate = np.mean(successful)  # TODO: Watch out here, success will log any subgoal reached, and not g
-        self.success_history.append(success_rate)
+        self.success_history.append(np.mean(successes_sg))
         if self.compute_Q:
             self.Q_history.append(np.mean(Qs))
+        self.n_episodes += self.rollout_batch_size
+        # successful = np.array(successes_g)[-1, :]
+        # assert successful.shape == (self.rollout_batch_size,)
+        # success_rate = np.mean(successful)  # TODO: Watch out here, success will log any subgoal reached, and not g
+        # self.success_history.append(success_rate)
+        # if self.compute_Q:
+        #     self.Q_history.append(np.mean(Qs))
         self.n_episodes += self.rollout_batch_size
 
         return convert_episode_to_batch_major(episode)

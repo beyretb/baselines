@@ -6,7 +6,7 @@ from tensorflow.contrib.staging import StagingArea
 
 from baselines import logger
 from baselines.herSimple.util import (
-    import_function, store_args, flatten_grads, transitions_in_episode_batch)
+    import_function, store_args, transitions_in_episode_batch)
 from baselines.herSimple.normalizer import Normalizer
 from baselines.herSimple.replay_buffer import ReplayBuffer
 from baselines.common.mpi_adam import MpiAdam
