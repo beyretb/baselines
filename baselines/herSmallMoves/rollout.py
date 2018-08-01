@@ -161,7 +161,8 @@ class RolloutWorker:
                        g=goals,
                        ag=achieved_goals,
                        sg=subgoals,
-                       r = rewards)
+                       r=rewards,
+                       sg_success=successes_sg)
         for key, value in zip(self.info_keys, info_values):
             episode['info_{}'.format(key)] = value
 

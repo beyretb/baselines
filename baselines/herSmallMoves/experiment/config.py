@@ -130,9 +130,9 @@ def configure_her(params):
         her_params[name] = params[name]
         params['_' + name] = her_params[name]
         del params[name]
-    sample_her_transitions = make_sample_her_transitions(**her_params)
+    sample_her_transitions, sample_her_goals_transitions = make_sample_her_transitions(**her_params)
 
-    return sample_her_transitions
+    return sample_her_transitions, sample_her_goals_transitions
 
 
 def simple_goal_subtract(a, b):
@@ -141,7 +141,7 @@ def simple_goal_subtract(a, b):
 
 
 def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
-    sample_her_transitions = configure_her(params)
+    sample_her_transitions, sample_her_goals_transitions = configure_her(params)
     # Extract relevant parameters.
     gamma = params['gamma']
     rollout_batch_size = params['rollout_batch_size']
@@ -160,6 +160,7 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
                         'rollout_batch_size': rollout_batch_size,
                         'subtract_goals': simple_goal_subtract,
                         'sample_transitions': sample_her_transitions,
+                        'sample_goal_transitions': sample_her_goals_transitions,
                         'gamma': gamma,
                         'n_subgoals': params['n_subgoals']
                         })

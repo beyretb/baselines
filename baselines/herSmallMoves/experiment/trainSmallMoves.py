@@ -37,9 +37,11 @@ def train(policy, rollout_worker, evaluator,
     for epoch in range(n_epochs):
         # train
         rollout_worker.clear_history()
+        # rollout_worker.render=True
         for _ in range(n_cycles):
             episode = rollout_worker.generate_rollouts()
             policy.store_episode(episode)
+            policy.train_goal() # TO REMOVE
             for _ in range(n_batches):
                 policy.train()
             policy.update_target_net()

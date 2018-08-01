@@ -4,7 +4,7 @@ import numpy as np
 
 
 class ReplayBuffer:
-    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions, n_subgoals):
+    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions, sample_goal_transitions, n_subgoals):
         """Creates a replay buffer.
 
         Args:
@@ -19,6 +19,7 @@ class ReplayBuffer:
         self.size = size_in_transitions // T
         self.T = T
         self.sample_transitions = sample_transitions
+        self.sample_goal_transitions = sample_goal_transitions
         self.n_subgoals = n_subgoals
         self.n_steps_per_subgoal = int(T/n_subgoals)
 
@@ -29,7 +30,8 @@ class ReplayBuffer:
                         for key, shape in buffer_shapes.items()}
         self.buffers_G.pop('u', None)
         self.buffers_G.pop('o', None)
-        self.buffers_G = {'r': np.empty([self.size, n_subgoals])}
+        self.buffers_G['r'] = np.empty([self.size, n_subgoals])
+        self.buffers_G['sg_success'] = np.empty([self.size, n_subgoals])
 
         # memory management
         self.current_size = 0
@@ -63,6 +65,27 @@ class ReplayBuffer:
 
         return transitions
 
+    def sample_goal(self, batch_size):
+        """Returns a dict {key: array(batch_size x shapes[key])}
+        """
+        buffers = {}
+
+        # with self.lock:
+        assert self.current_size > 0
+        for key in self.buffers_G.keys():
+            buffers[key] = self.buffers_G[key][:self.current_size]
+
+        # buffers['o_2'] = buffers['o'][:, 1:, :]
+        # buffers['ag_2'] = buffers['ag'][:, 1:, :]
+        # buffers['ag_2'] = buffers['ag'][:, 1:, :]
+
+        transitions = self.sample_goal_transitions(buffers, batch_size)
+
+        # for key in (['r', 'o_2', 'ag_2'] + list(self.buffers.keys())):
+        #     assert key in transitions, "key %s missing from transitions" % key
+
+        return transitions
+
     def store_episode(self, episode_batch):
         """episode_batch: array(batch_size x (T or T+1) x dim_key)
         """
@@ -74,17 +97,20 @@ class ReplayBuffer:
         idxs = self._get_storage_idx(batch_size)
 
         rewards = episode_batch.pop('r')
+        sg_success = episode_batch.pop('sg_success')
 
         # load inputs into buffers
         for key in self.buffers.keys():
             self.buffers[key][idxs] = episode_batch[key]
 
         for key in self.buffers_G.keys():
-            if key != 'r':
+            if key != 'r' and key != 'sg_success':
                 self.buffers_G[key][idxs] = episode_batch[key][:,np.array(range(self.n_subgoals))*self.n_steps_per_subgoal]
 
         for i in range(self.n_subgoals):
             self.buffers_G['r'][idxs][:,i] = np.sum(rewards[:,i*self.n_steps_per_subgoal:(i+1)*self.n_steps_per_subgoal], axis=1)
+
+        self.buffers_G['sg_success'][idxs] = sg_success
 
         self.n_transitions_stored += batch_size * self.T
 

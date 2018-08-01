@@ -95,7 +95,8 @@ class DDPG(object):
         buffer_shapes['ag'] = (self.T+1, self.dimg)
 
         buffer_size = (self.buffer_size // self.rollout_batch_size) * self.rollout_batch_size
-        self.buffer = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions, self.n_subgoals)
+        self.buffer = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions,
+                                   self.sample_goal_transitions, self.n_subgoals)
 
     def _random_action(self, n):
         return np.random.uniform(low=-self.max_u, high=self.max_u, size=(n, self.dimu))
@@ -270,6 +271,38 @@ class DDPG(object):
         # ])
 
         return critic_loss, actor_loss
+
+    def sample_goal_batch(self):
+        transitions = self.buffer.sample_goal(self.batch_size)
+        # o, o_2, g = transitions['o'], transitions['o_2'], transitions['g']
+        # ag, ag_2 = transitions['ag'], transitions['ag_2']
+        # sg = transitions['sg']
+        # transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
+        # transitions['o_2'], transitions['g_2'] = self._preprocess_og(o_2, ag_2, g)
+        # transitions['sg'] = self._preprocess_sg(sg)
+        # # transitions['sg_2'] = self._preprocess_sg(sg_2,g)
+        # transitions['rg'] = transitions['r']
+        #
+        transitions_batch = [transitions[key] for key in self.stage_shapes.keys()]
+        return transitions_batch
+
+    def stage_goal_batch(self, batch=None):
+        if batch is None:
+            batch = self.sample_goal_batch()
+        assert len(self.buffer_ph_tf) == len(batch)
+        self.sess.run(self.stage_op, feed_dict=dict(zip(self.buffer_ph_tf, batch)))
+
+    def train_goal(self, stage=True):
+        if stage:
+            self.stage_goal_batch()
+        critic_loss_G, actor_loss_G, _, _ = self.sess.run([
+            self.Q_loss_G_tf,
+            self.main_G.Q_pi_tf,
+            self.optimize_pi_G,
+            self.optimize_Q_G
+        ])
+
+        return critic_loss_G, actor_loss_G
 
     def _init_target_net(self):
         self.sess.run(self.init_target_net_op)
