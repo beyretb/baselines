@@ -1,0 +1,5 @@
+herSimple is a single threaded version of OpenAI her, following the same structure.
+
+It is stripped down from all the multi processing function as well as the logs.
+
+Allows for fast prototyping of modifications to HER. Run with FetchReach-v1 for quick learning.

@@ -1,0 +1,7 @@
+herSimpleCurrentGoalInput is based on the single threaded version of HER (hersimple.
+
+The main idea here is to incorporate the current achieved goal to the training inputs for both the actor
+and critic networks. This comes from the idea that for a same goals and a same observation. the set of actions to
+output should be different if the current achieved goal is different.
+e.g.: hand flat (=observation), target is to have the pen along the Z axis. If the starting achieved goal is pen along X
+      or pen along Y, the actions should be different.
