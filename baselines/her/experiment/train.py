@@ -83,7 +83,7 @@ def train(policy, rollout_worker, evaluator,
 
 
 def launch(
-    env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return,
+    env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return, fb,
     override_params={}, save_policies=True
 ):
     # Fork for multi-CPU MPI implementation.
@@ -103,7 +103,7 @@ def launch(
     # Configure logging
     if rank == 0:
         if logdir or logger.get_dir() is None:
-            logger.configure(dir=logdir)
+            logger.configure(dir=logdir, fb=fb)
     else:
         logger.configure()
     logdir = logger.get_dir()
@@ -183,6 +183,7 @@ def launch(
 @click.option('--policy_save_interval', type=int, default=5, help='the interval with which policy pickles are saved. If set to 0, only the best and latest policy will be pickled.')
 @click.option('--replay_strategy', type=click.Choice(['future', 'none']), default='future', help='the HER replay strategy to be used. "future" uses HER, "none" disables HER.')
 @click.option('--clip_return', type=int, default=1, help='whether or not returns should be clipped')
+@click.option('--fb', is_flag=True, help='log progress with facebook bot')
 def main(**kwargs):
     launch(**kwargs)
 
