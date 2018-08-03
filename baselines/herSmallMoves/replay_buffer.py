@@ -4,7 +4,8 @@ import numpy as np
 
 
 class ReplayBuffer:
-    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions, sample_goal_transitions, n_subgoals):
+    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions, sample_goal_transitions,
+                 n_subgoals, sample_method, reward_type):
         """Creates a replay buffer.
 
         Args:
@@ -22,6 +23,8 @@ class ReplayBuffer:
         self.sample_goal_transitions = sample_goal_transitions
         self.n_subgoals = n_subgoals
         self.n_steps_per_subgoal = int(T/n_subgoals)
+        self.sample_method = sample_method
+        self.reward_type = reward_type
 
         # self.buffers is {key: array(size_in_episodes x T or T+1 x dim_key)}
         self.buffers = {key: np.empty([self.size, *shape])
@@ -57,7 +60,6 @@ class ReplayBuffer:
 
         buffers['o_2'] = buffers['o'][:, 1:, :]
         buffers['ag_2'] = buffers['ag'][:, 1:, :]
-        buffers['ag_2'] = buffers['ag'][:, 1:, :]
 
         transitions = self.sample_transitions(buffers, batch_size, self.n_subgoals)
 
@@ -80,7 +82,7 @@ class ReplayBuffer:
         # buffers['ag_2'] = buffers['ag'][:, 1:, :]
         # buffers['ag_2'] = buffers['ag'][:, 1:, :]
 
-        transitions = self.sample_goal_transitions(buffers, batch_size)
+        transitions = self.sample_goal_transitions(buffers, batch_size, self.sample_method, self.reward_type)
 
         # for key in (['r', 'o_2', 'ag_2'] + list(self.buffers.keys())):
         #     assert key in transitions, "key %s missing from transitions" % key

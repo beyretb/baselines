@@ -58,24 +58,24 @@ class ActorCriticGoals:
             hidden (int): number of hidden units that should be used in hidden layers
             layers (int): number of hidden layers
         """
-        self.g_tf = inputs_tf['g']
-        self.ag_tf = inputs_tf['ag']
-        self.sg_tf = inputs_tf['sg']
+        self.o_tf = inputs_tf['o']
+        self.g_tf = inputs_tf['g']  # the goal will be sg_t+1 generally
+        self.sg_tf = inputs_tf['sg']  # the actions generated are subgoals
 
         # Prepare inputs for actor and critic.
+        o = self.o_stats.normalize(self.o_tf)
         g = self.g_stats.normalize(self.g_tf)
-        ag = self.g_stats.normalize(self.ag_tf)
         sg = self.g_stats.normalize(self.sg_tf)
-        input_pi = tf.concat(axis=1, values=[ag, g])  # for actor
+        input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 
         # Networks.
         with tf.variable_scope('pi'):
             self.pi_tf = nn(input_pi, [self.hidden] * self.layers + [self.dimg])  #TODO: check if ok to remove tanh ?? (see in DDPG)
         with tf.variable_scope('Q'):
             # for policy training
-            input_Q = tf.concat(axis=1, values=[ag, g, self.pi_tf])
+            input_Q = tf.concat(axis=1, values=[o, g, self.pi_tf])
             self.Q_pi_tf = nn(input_Q, [self.hidden] * self.layers + [1])
             # for critic training
-            input_Q = tf.concat(axis=1, values=[ag, g, sg])
+            input_Q = tf.concat(axis=1, values=[o, g, sg])
             self._input_Q = input_Q  # exposed for tests
             self.Q_tf = nn(input_Q, [self.hidden] * self.layers + [1], reuse=True)

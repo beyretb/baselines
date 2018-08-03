@@ -62,15 +62,29 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
 
         return transitions
 
-    def _sample_her_goals_transitions(episode_batch, batch_size_in_transitions):
+    def _sample_her_goals_transitions(episode_batch, batch_size_in_transitions, sample_method, reward_type):
+        '''
+        sample_method: (int) describes which type of sampling we want for subgoals, choices are:
+            1. sample traces as is, take (s_{t-1}, sg_{t-1}, sg_{t}) not considering if goals reached or not (no HER)
+            2. replace all sg by ag and then sample as for 1 (ie: we only consider reached subgoals
+            3. replace only sg_{t-1} with ag_{t}
+        reward_type: (int) describes which type of reward we want to associate to golas traces
+            1. simple sum of all rewards during the two subgoals episodes (s_{t-1} -> sg_{t-1} -> sg_{t})
+            2. Add penalty for not reaching subgoals ??
+            3. find more
+
+        '''
 
         n_subgoals = episode_batch['sg'].shape[1]
         rollout_batch_size = episode_batch['sg'].shape[0]
         batch_size = batch_size_in_transitions
 
-        # TODO: vendredi, change the sampling of goals for training of the G network as we want (ag_t, sg_t, sg_{t+1})
-        # TODO: figure out when to use ag, hen to use sg, and maybe recalculate R from the lower level policy to make
-        # TODO: sure that goals are really bad of if it was jsut the lower level polucy that didn t learn correcly
+        if sample_method==1:
+            episode_idxs = np.random.randint(0, rollout_batch_size, batch_size)
+            t_samples = np.random.randint(n_subgoals, size=batch_size)
+            transitions = {key: episode_batch[key][episode_idxs, t_samples].copy()
+                           for key in episode_batch.keys()}
+
 
 
         # First, replace sg_t that haven't been reached by ag_{t+1} so that all traces have an achieved subgoal

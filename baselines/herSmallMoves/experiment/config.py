@@ -36,7 +36,11 @@ DEFAULT_PARAMS = {
     'batch_size': 256,  # per mpi thread, measured in transitions and reduced to even multiple of chunk_length.
     'n_test_rollouts': 10,  # number of test rollouts per epoch, each consists of rollout_batch_size rollouts
     'test_with_polyak': False,  # run test episodes with the target network
-    'n_subgoals': 3,  # number of subgoals for an episode (WARNING: n_subgoals==1 means no subgoal, just end goal)
+    'n_subgoals': 2,  # number of subgoals for an episode (WARNING: n_subgoals==1 means no subgoal, just end goal)
+    'sg_regenerate': True,  # for sg generator at rollout, if true regenerate sg_t if ag_{t-1}!=sg{t-1}, otherwise
+                            # stick to the initially planned sequence of subgoals
+    'reward_type': 1,
+    'sample_method': 1,
     # exploration
     'random_eps': 0.3,  # percentage of time a random action is taken
     'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of
@@ -162,7 +166,9 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
                         'sample_transitions': sample_her_transitions,
                         'sample_goal_transitions': sample_her_goals_transitions,
                         'gamma': gamma,
-                        'n_subgoals': params['n_subgoals']
+                        'n_subgoals': params['n_subgoals'],
+                        'reward_type': params['reward_type'],
+                        'sample_method': params['sample_method'],
                         })
     ddpg_params['info'] = {
         'env_name': params['env_name'],

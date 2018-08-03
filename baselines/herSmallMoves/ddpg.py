@@ -67,7 +67,7 @@ class DDPG(object):
             if key.startswith('info_'):
                 continue
             stage_shapes[key] = (None, *input_shapes[key])
-        for key in ['o', 'g', 'ag']:
+        for key in ['o', 'g', 'sg']:
             stage_shapes[key + '_2'] = stage_shapes[key]
         stage_shapes['r'] = (None,)
         stage_shapes['rg'] = (None,)
@@ -84,8 +84,8 @@ class DDPG(object):
 
             self._create_network(reuse=reuse)
 
-        # self.goal_noise = self._GaussianNoise()
-        self.goal_noise = self._UONoise()
+        self.goal_noise = self._GaussianNoise()
+        # self.goal_noise = self._UONoise()
         next(self.goal_noise)
 
         # Configure the replay buffer.
@@ -96,7 +96,7 @@ class DDPG(object):
 
         buffer_size = (self.buffer_size // self.rollout_batch_size) * self.rollout_batch_size
         self.buffer = ReplayBuffer(buffer_shapes, buffer_size, self.T, self.sample_transitions,
-                                   self.sample_goal_transitions, self.n_subgoals)
+                                   self.sample_goal_transitions, self.n_subgoals, self.sample_method, self.reward_type)
 
     def _random_action(self, n):
         return np.random.uniform(low=-self.max_u, high=self.max_u, size=(n, self.dimu))
@@ -181,17 +181,17 @@ class DDPG(object):
     def get_current_buffer_size(self):
         return self.buffer.get_current_size()
 
-    def get_subgoal(self, ag, g, goals_noise_eps=0., goals_random_eps=0.):
+    def get_subgoal(self, o, ag, g, goals_noise_eps=0., goals_random_eps=0.):
 
         if np.random.rand() < goals_random_eps:
             sg = ag+next(self.goal_noise)
         else:
-            ag = self._preprocess_sg(ag)  # clip goals
+            o,g = self._preprocess_og(o,g,g)  # clip goals
             policy = self.target_G
             vals = [policy.pi_tf]
             feed = {
+                policy.o_tf: o.reshape(-1, self.dimo),
                 policy.g_tf: g.reshape(-1, self.dimg),
-                policy.ag_tf: ag.reshape(-1, self.dimg),
                 policy.sg_tf: np.zeros((g.size // self.dimg, self.dimg), dtype=np.float32)
             }
             sg = self.sess.run(vals, feed_dict=feed)
@@ -209,7 +209,7 @@ class DDPG(object):
             state += 0.1*(-theta * state + sigma * np.random.randn(self.dimg))
 
     def _GaussianNoise(self):
-        mean = 0.05
+        mean = 0
         sigma = 0.2
         state = np.zeros(self.dimg)
         while True:
@@ -242,6 +242,7 @@ class DDPG(object):
         transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
         transitions['o_2'], transitions['g_2'] = self._preprocess_og(o_2, ag_2, g)
         transitions['sg'] = self._preprocess_sg(sg)
+        transitions['sg_2'] = self._preprocess_sg(sg)
         # transitions['sg_2'] = self._preprocess_sg(sg_2,g)
         transitions['rg'] = transitions['r']
 
@@ -263,12 +264,6 @@ class DDPG(object):
             self.optimize_pi,
             self.optimize_Q
         ])
-        # critic_loss_G, actor_loss_G, _, _ = self.sess.run([
-        #     self.Q_loss_G_tf,
-        #     self.main_G.Q_pi_tf,
-        #     self.optimize_pi_G,
-        #     self.optimize_Q_G
-        # ])
 
         return critic_loss, actor_loss
 
@@ -360,7 +355,7 @@ class DDPG(object):
                 vs.reuse_variables()
             target_batch_tf = batch_tf.copy()
             target_batch_tf['o'] = batch_tf['o_2']
-            target_batch_tf['g'] = batch_tf['g_2']
+            target_batch_tf['sg'] = batch_tf['sg_2']
             self.target = self.create_actor_critic(target_batch_tf, net_type='target', **self.__dict__)
             vs.reuse_variables()
         assert len(self._vars("main")) == len(self._vars("target"))
@@ -405,7 +400,7 @@ class DDPG(object):
                 vs.reuse_variables()
             target_batch_tf = batch_tf.copy()
             target_batch_tf['g'] = batch_tf['g_2']
-            target_batch_tf['ag'] = batch_tf['ag_2']
+            target_batch_tf['sg'] = batch_tf['sg_2']
             self.target_G = self.create_actor_critic_goals(target_batch_tf, net_type='target_G', **self.__dict__)
             vs.reuse_variables()
         assert len(self._vars("main_G")) == len(self._vars("target_G"))

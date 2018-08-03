@@ -70,17 +70,21 @@ class RolloutWorker:
         # compute observations
         o = np.empty((self.rollout_batch_size, self.dims['o']), np.float32)  # observations
         ag = np.empty((self.rollout_batch_size, self.dims['g']), np.float32)  # achieved goals
-        sg = np.empty((self.rollout_batch_size, self.dims['g']), np.float32)
         o[:] = self.initial_o
         ag[:] = self.initial_ag
-        if self.n_subgoals>1:
-            sg[:] = self.policy.get_subgoal(ag, self.g,
+
+        # we first generate the set of subgoals
+        # two possibilities: see notes
+
+        subgoals = np.zeros((self.n_subgoals*self.n_steps_per_subgoal, self.rollout_batch_size, self.dims['g']))
+        subgoals[(self.n_subgoals-1)*self.n_steps_per_subgoal:,:,:] = self.g.copy()
+        for n in range(self.n_subgoals-1,0,-1):
+            sg = self.policy.get_subgoal(o, ag, subgoals[(n+1)*self.n_steps_per_subgoal-1],
                                goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
                                goals_random_eps=self.goals_random_eps if not self.exploit else 0.)
-        else:
-            sg[:]=self.g
+            subgoals[(n-1)*self.n_steps_per_subgoal:n*self.n_steps_per_subgoal,:,:] = sg.copy()
         # generate episodes
-        obs, achieved_goals, acts, goals, subgoals, successes_g, successes_sg, rewards = [], [], [], [], [], [], [], []
+        obs, achieved_goals, acts, goals, successes_g, successes_sg, rewards = [], [], [], [], [], [], []
         info_values = [np.empty((self.T, self.rollout_batch_size, self.dims['info_' + key]), np.float32) for key in self.info_keys]
         Qs = []
 
@@ -90,9 +94,10 @@ class RolloutWorker:
             for t_sub in range(self.n_steps_per_subgoal):
 
                 t = n*self.n_steps_per_subgoal+t_sub
+                sg = subgoals[t]
 
                 policy_output = self.policy.get_actions(
-                    o, ag, sg,
+                    o, ag, subgoals[t],
                     compute_Q=self.compute_Q,
                     noise_eps=self.noise_eps if not self.exploit else 0.,
                     random_eps=self.random_eps if not self.exploit else 0.,
@@ -137,20 +142,18 @@ class RolloutWorker:
                 successes_g.append(success_g.copy())
                 acts.append(u.copy())
                 goals.append(self.g.copy())
-                subgoals.append(sg.copy())
                 rewards.append(reward.copy())
                 o[...] = o_new
                 ag[...] = ag_new
 
             successes_sg.append((success_sg>0).copy())
-            # Sample new subgoal, making sure that the last subgoal is the actual goal
-            if n == self.n_subgoals - 2:
-                sg = self.g.copy()
-            else:
-                sg[:] = self.policy.get_subgoal(ag, self.g,
-                               goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
-                               goals_random_eps=self.goals_random_eps if not self.exploit else 0.)
 
+            if self.sg_regenerate and n<self.n_subgoals-1:
+                sg = self.policy.get_subgoal(o, ag,
+                                             subgoals[(n+1) * self.n_steps_per_subgoal-1],
+                                             goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
+                                             goals_random_eps=self.goals_random_eps if not self.exploit else 0.)
+                subgoals[(n - 1) * self.n_steps_per_subgoal:n * self.n_steps_per_subgoal,:,:] = sg.copy()
         obs.append(o.copy())
         achieved_goals.append(ag.copy())
         # subgoals.append(sg.copy())

@@ -41,7 +41,7 @@ def train(policy, rollout_worker, evaluator,
         for _ in range(n_cycles):
             episode = rollout_worker.generate_rollouts()
             policy.store_episode(episode)
-            policy.train_goal() # TO REMOVE
+            # policy.train_goal() # TO REMOVE
             for _ in range(n_batches):
                 policy.train()
             policy.update_target_net()
@@ -159,7 +159,7 @@ def launch(env, n_epochs, replay_strategy, clip_return,override_params={}, save_
         'T': params['T'],
     }
 
-    for name in ['T', 'rollout_batch_size', 'gamma', 'noise_eps', 'random_eps',
+    for name in ['T', 'rollout_batch_size', 'gamma', 'noise_eps', 'random_eps', 'sg_regenerate',
                  'goals_noise_eps', 'goals_random_eps', 'n_subgoals', 'n_steps_per_subgoal']:
         rollout_params[name] = params[name]
         eval_params[name] = params[name]
