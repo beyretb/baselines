@@ -68,9 +68,14 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
         rollout_batch_size = episode_batch['sg'].shape[0]
         batch_size = batch_size_in_transitions
 
+        # TODO: vendredi, change the sampling of goals for training of the G network as we want (ag_t, sg_t, sg_{t+1})
+        # TODO: figure out when to use ag, hen to use sg, and maybe recalculate R from the lower level policy to make
+        # TODO: sure that goals are really bad of if it was jsut the lower level polucy that didn t learn correcly
+
+
         # First, replace sg_t that haven't been reached by ag_{t+1} so that all traces have an achieved subgoal
-        sg_not_reached = np.where(episode_batch['sg_success'] == 0)
-        episode_batch['sg'][:,sg_not_reached, :] = episode_batch['ag'][:,(sg_not_reached[0], sg_not_reached[1]+1), :]
+        # sg_not_reached = np.where(episode_batch['sg_success'] == 0)
+        # episode_batch['sg'][:,sg_not_reached, :] = episode_batch['ag'][:,(sg_not_reached[0], sg_not_reached[1]+1), :]
 
         # Select which episodes and time steps to use.
         episode_idxs = np.random.randint(0, rollout_batch_size, batch_size)
