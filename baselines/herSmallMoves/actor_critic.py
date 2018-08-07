@@ -65,12 +65,12 @@ class ActorCriticGoals:
         # Prepare inputs for actor and critic.
         o = self.o_stats.normalize(self.o_tf)
         g = self.g_stats.normalize(self.g_tf)
-        sg = self.g_stats.normalize(self.sg_tf)
+        sg = g - self.g_stats.normalize(self.sg_tf) # the network outputs a subgoal relatively to the end goal
         input_pi = tf.concat(axis=1, values=[o, g])  # for actor
 
         # Networks.
         with tf.variable_scope('pi'):
-            self.pi_tf = nn(input_pi, [self.hidden] * self.layers + [self.dimg])  #TODO: check if ok to remove tanh ?? (see in DDPG)
+            self.pi_tf = tf.sigmoid(nn(input_pi, [self.hidden] * self.layers + [self.dimg]))
         with tf.variable_scope('Q'):
             # for policy training
             input_Q = tf.concat(axis=1, values=[o, g, self.pi_tf])

@@ -49,6 +49,7 @@ def train(policy, rollout_worker, evaluator,
                     policy.train_goal()
                 policy.update_target_net_G()
         print('Success rate: {}'.format(rollout_worker.current_success_rate()))
+        rollout_worker.goals_random_eps -= 0.1
 
         # test
         # evaluator.clear_history()

@@ -108,6 +108,7 @@ class ReplayBuffer:
             self.buffers[key][idxs] = episode_batch[key]
 
         self.buffers_G['g'][idxs] = episode_batch['g'][:,np.array(range(self.n_subgoals))*self.n_steps_per_subgoal]
+        self.buffers_G['o'][idxs] = episode_batch['o'][:, np.array(range(self.n_subgoals)) * self.n_steps_per_subgoal]
         self.buffers_G['sg'][idxs] = episode_batch['sg'][:, np.array(range(self.n_subgoals)) * self.n_steps_per_subgoal]
         self.buffers_G['ag'][idxs] = episode_batch['ag'][:, np.array(range(self.n_subgoals+1)) * self.n_steps_per_subgoal]
         for i in range(self.n_subgoals):

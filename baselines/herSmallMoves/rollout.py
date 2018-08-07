@@ -129,12 +129,15 @@ class RolloutWorker:
                         for idx, key in enumerate(self.info_keys):
                             info_values[idx][t, i] = info[key]
                         if self.render:
+                            self.envs[i].env.sg = subgoals[t][i]
+                            # print(subgoals[t][i])
                             self.envs[i].render()
                     except MujocoException as e:
                         return self.generate_rollouts()
 
                     if np.isnan(o_new).any():
-                        self.logger.warning('NaN caught during rollout generation. Trying again...')
+                        # self.logger.warning('NaN caught during rollout generation. Trying again...')
+                        print('NaN caught during rollout generation. Trying again...')
                         self.reset_all_rollouts()
                         return self.generate_rollouts()
                 obs.append(o.copy())

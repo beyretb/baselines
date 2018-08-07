@@ -202,9 +202,12 @@ class DDPG(object):
         return self.buffer.get_current_size()
 
     def get_subgoal(self, o, ag, g, goals_noise_eps=0., goals_random_eps=0.):
-
+        # print('ag: '+str(ag))
+        # print('g: ' + str(g))
         if np.random.rand() < goals_random_eps:
-            sg = ag+next(self.goal_noise)
+            noise = next(self.goal_noise)
+            sg = ag + noise
+            # print('random: '+str(sg))
         else:
             o,g = self._preprocess_og(o,g,g)  # clip goals
             policy = self.target_G
@@ -214,10 +217,13 @@ class DDPG(object):
                 policy.g_tf: g.reshape(-1, self.dimg),
                 policy.sg_tf: np.zeros((g.size // self.dimg, self.dimg), dtype=np.float32)
             }
-            sg = self.sess.run(vals, feed_dict=feed)
+            sg = g + self.sess.run(vals, feed_dict=feed) # network output is relative position to end goal
             noise = goals_noise_eps * np.random.randn(*g.shape)
             sg += noise
+            # print('predict: ' + str(sg))
         sg = np.clip(sg, -self.clip_obs, self.clip_obs)
+        # print('final: ' + str(sg))
+        # print('-------------')
         return sg
 
     def _UONoise(self):
@@ -230,7 +236,7 @@ class DDPG(object):
 
     def _GaussianNoise(self):
         mean = 0
-        sigma = 0.2
+        sigma = 0.05
         state = np.zeros(self.dimg)
         while True:
             yield state
@@ -316,7 +322,7 @@ class DDPG(object):
             self.optimize_pi_G,
             self.optimize_Q_G
         ])
-
+        # print(critic_loss_G)
         return critic_loss_G, actor_loss_G
 
     def _init_target_net(self):
