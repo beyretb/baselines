@@ -29,12 +29,13 @@ class ReplayBuffer:
         # self.buffers is {key: array(size_in_episodes x T or T+1 x dim_key)}
         self.buffers = {key: np.empty([self.size, *shape])
                         for key, shape in buffer_shapes.items()}
-        self.buffers_G = {key: np.empty([self.size, n_subgoals, shape[1]])
-                        for key, shape in buffer_shapes.items()}
-        self.buffers_G = {'g':np.empty([self.size, n_subgoals, buffer_shapes['g'][1]]),
+        # self.buffers_G = {key: np.empty([self.size, n_subgoals, shape[1]])
+        #                 for key, shape in buffer_shapes.items()}
+        self.buffers_G = {'ag': np.empty([self.size, n_subgoals+1, buffer_shapes['g'][1]]),
+                          'g':np.empty([self.size, n_subgoals, buffer_shapes['g'][1]]),
+                          'o': np.empty([self.size, n_subgoals, buffer_shapes['o'][1]]),
+                          'r': np.empty([self.size, n_subgoals]),
                           'sg': np.empty([self.size, n_subgoals, buffer_shapes['g'][1]]),
-                          'ag': np.empty([self.size, n_subgoals+1, buffer_shapes['g'][1]]),
-                          'r':np.empty([self.size, n_subgoals]),
                           'sg_success':np.empty([self.size, n_subgoals])}
 
         # memory management
@@ -78,8 +79,8 @@ class ReplayBuffer:
         for key in self.buffers_G.keys():
             buffers[key] = self.buffers_G[key][:self.current_size]
 
-        # buffers['o_2'] = buffers['o'][:, 1:, :]
-        # buffers['ag_2'] = buffers['ag'][:, 1:, :]
+        buffers['o_2'] = buffers['o'][1:, :, :]
+        buffers['sg_2'] = buffers['sg'][1:, :, :]
         # buffers['ag_2'] = buffers['ag'][:, 1:, :]
 
         transitions = self.sample_goal_transitions(buffers, batch_size, self.sample_method, self.reward_type)
@@ -110,7 +111,7 @@ class ReplayBuffer:
         self.buffers_G['sg'][idxs] = episode_batch['sg'][:, np.array(range(self.n_subgoals)) * self.n_steps_per_subgoal]
         self.buffers_G['ag'][idxs] = episode_batch['ag'][:, np.array(range(self.n_subgoals+1)) * self.n_steps_per_subgoal]
         for i in range(self.n_subgoals):
-            self.buffers_G['r'][idxs][:,i] = np.sum(rewards[:,i*self.n_steps_per_subgoal:(i+1)*self.n_steps_per_subgoal], axis=1)
+            self.buffers_G['r'][idxs,i] = np.sum(rewards[:,i*self.n_steps_per_subgoal:(i+1)*self.n_steps_per_subgoal], axis=1).copy()
         self.buffers_G['sg_success'][idxs] = sg_success
 
         self.n_transitions_stored += batch_size * self.T

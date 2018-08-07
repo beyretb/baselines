@@ -76,7 +76,7 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
         '''
 
         n_subgoals = episode_batch['sg'].shape[1]
-        rollout_batch_size = episode_batch['sg'].shape[0]
+        rollout_batch_size = episode_batch['sg'].shape[0]-1
         batch_size = batch_size_in_transitions
 
         if sample_method==1:
@@ -92,18 +92,18 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
         # episode_batch['sg'][:,sg_not_reached, :] = episode_batch['ag'][:,(sg_not_reached[0], sg_not_reached[1]+1), :]
 
         # Select which episodes and time steps to use.
-        episode_idxs = np.random.randint(0, rollout_batch_size, batch_size)
-        t_samples = np.random.randint(n_subgoals, size=batch_size)
-        transitions = {key: episode_batch[key][episode_idxs, t_samples].copy()
-                       for key in episode_batch.keys()}
-
-        # We now apply HER to the end goal, replacing
-        her_indexes = np.where(np.random.uniform(size=batch_size) < future_p)
-        future_offset = np.random.uniform(size=batch_size) * (n_subgoals - t_samples)
-        future_offset = future_offset.astype(int)
-        future_t = (t_samples + future_offset)[her_indexes]
-        future_ag = episode_batch['sg'][episode_idxs[her_indexes], future_t]
-        transitions['g'][her_indexes] = future_ag
+        # episode_idxs = np.random.randint(0, rollout_batch_size, batch_size)
+        # t_samples = np.random.randint(n_subgoals, size=batch_size)
+        # transitions = {key: episode_batch[key][episode_idxs, t_samples].copy()
+        #                for key in episode_batch.keys()}
+        #
+        # # We now apply HER to the end goal, replacing
+        # her_indexes = np.where(np.random.uniform(size=batch_size) < future_p)
+        # future_offset = np.random.uniform(size=batch_size) * (n_subgoals - t_samples)
+        # future_offset = future_offset.astype(int)
+        # future_t = (t_samples + future_offset)[her_indexes]
+        # future_ag = episode_batch['sg'][episode_idxs[her_indexes], future_t]
+        # transitions['g'][her_indexes] = future_ag
 
         return transitions
 

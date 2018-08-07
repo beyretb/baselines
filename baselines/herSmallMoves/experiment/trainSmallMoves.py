@@ -41,10 +41,13 @@ def train(policy, rollout_worker, evaluator,
         for _ in range(n_cycles):
             episode = rollout_worker.generate_rollouts()
             policy.store_episode(episode)
-            # policy.train_goal() # TO REMOVE
             for _ in range(n_batches):
                 policy.train()
             policy.update_target_net()
+            if epoch>1:
+                for _ in range(n_batches):
+                    policy.train_goal()
+                policy.update_target_net_G()
         print('Success rate: {}'.format(rollout_worker.current_success_rate()))
 
         # test

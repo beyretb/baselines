@@ -62,18 +62,19 @@ class DDPG(object):
         self.dimu = self.input_dims['u']
 
         # Prepare staging area for feeding data to the model.
+
+        # First for the lower level actor
         stage_shapes = OrderedDict()
         for key in sorted(self.input_dims.keys()):
             if key.startswith('info_'):
                 continue
-            stage_shapes[key] = (None, *input_shapes[key])
-        for key in ['o', 'g', 'sg']:
+            if key!='g':
+                stage_shapes[key] = (None, *input_shapes[key])
+        for key in ['o', 'sg']:
             stage_shapes[key + '_2'] = stage_shapes[key]
         stage_shapes['r'] = (None,)
-        stage_shapes['rg'] = (None,)
         self.stage_shapes = stage_shapes
-
-        # Create network.
+        # stage placeholder
         with tf.variable_scope(self.scope):
             self.staging_tf = StagingArea(
                 dtypes=[tf.float32 for _ in self.stage_shapes.keys()],
@@ -82,7 +83,26 @@ class DDPG(object):
                 tf.placeholder(tf.float32, shape=shape) for shape in self.stage_shapes.values()]
             self.stage_op = self.staging_tf.put(self.buffer_ph_tf)
 
+
+        # Then for the higher level actor
+        stage_shapes_G = OrderedDict()
+        for key in sorted(['o', 'g', 'sg']):
+            stage_shapes_G[key] = (None, *input_shapes[key])
+        for key in ['o', 'sg']:
+            stage_shapes_G[key + '_2'] = stage_shapes_G[key]
+        stage_shapes_G['r'] = (None,)
+        self.stage_shapes_G = stage_shapes_G
+        # stage placeholder
+        with tf.variable_scope(self.scope):
+            self.staging_G_tf = StagingArea(
+                dtypes=[tf.float32 for _ in self.stage_shapes_G.keys()],
+                shapes=list(self.stage_shapes_G.values()))
+            self.buffer_G_ph_tf = [
+                tf.placeholder(tf.float32, shape=shape) for shape in self.stage_shapes_G.values()]
+            self.stage_G_op = self.staging_G_tf.put(self.buffer_G_ph_tf)
+
             self._create_network(reuse=reuse)
+
 
         self.goal_noise = self._GaussianNoise()
         # self.goal_noise = self._UONoise()
@@ -269,23 +289,23 @@ class DDPG(object):
 
     def sample_goal_batch(self):
         transitions = self.buffer.sample_goal(self.batch_size)
-        # o, o_2, g = transitions['o'], transitions['o_2'], transitions['g']
+        o, o_2, g = transitions['o'], transitions['o_2'], transitions['g']
         # ag, ag_2 = transitions['ag'], transitions['ag_2']
         # sg = transitions['sg']
-        # transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
+        transitions['o'], transitions['g'] = self._preprocess_og(o, g, g)
         # transitions['o_2'], transitions['g_2'] = self._preprocess_og(o_2, ag_2, g)
         # transitions['sg'] = self._preprocess_sg(sg)
         # # transitions['sg_2'] = self._preprocess_sg(sg_2,g)
         # transitions['rg'] = transitions['r']
         #
-        transitions_batch = [transitions[key] for key in self.stage_shapes.keys()]
+        transitions_batch = [transitions[key] for key in self.stage_shapes_G.keys()]
         return transitions_batch
 
     def stage_goal_batch(self, batch=None):
         if batch is None:
             batch = self.sample_goal_batch()
-        assert len(self.buffer_ph_tf) == len(batch)
-        self.sess.run(self.stage_op, feed_dict=dict(zip(self.buffer_ph_tf, batch)))
+        assert len(self.buffer_G_ph_tf) == len(batch)
+        self.sess.run(self.stage_G_op, feed_dict=dict(zip(self.buffer_G_ph_tf, batch)))
 
     def train_goal(self, stage=True):
         if stage:
@@ -305,6 +325,8 @@ class DDPG(object):
 
     def update_target_net(self):
         self.sess.run(self.update_target_net_op)
+
+    def update_target_net_G(self):
         self.sess.run(self.update_target_G_net_op)
 
     def clear_buffer(self):
@@ -336,14 +358,13 @@ class DDPG(object):
                 vs.reuse_variables()
             self.g_stats = Normalizer(self.dimg, self.norm_eps, self.norm_clip, sess=self.sess)
 
+        # ================== Q network ===============================================================
+
         # mini-batch sampling.
         batch = self.staging_tf.get()
         batch_tf = OrderedDict([(key, batch[i])
                                 for i, key in enumerate(self.stage_shapes.keys())])
         batch_tf['r'] = tf.reshape(batch_tf['r'], [-1, 1])
-        batch_tf['rg'] = tf.reshape(batch_tf['rg'], [-1, 1])
-
-        # ================== Q network ===============================================================
 
         with tf.variable_scope('main') as vs:
             if reuse:
@@ -390,23 +411,29 @@ class DDPG(object):
 
         # ================== G network ===============================================================
 
+        # mini-batch sampling.
+        batch_G = self.staging_G_tf.get()
+        batch_G_tf = OrderedDict([(key, batch_G[i])
+                                for i, key in enumerate(self.stage_shapes_G.keys())])
+        batch_G_tf['r'] = tf.reshape(batch_G_tf['r'], [-1, 1])
+
         with tf.variable_scope('main_G') as vs:
             if reuse:
                 vs.reuse_variables()
-            self.main_G = self.create_actor_critic_goals(batch_tf, net_type='main_G', **self.__dict__)
+            self.main_G = self.create_actor_critic_goals(batch_G_tf, net_type='main_G', **self.__dict__)
             vs.reuse_variables()
         with tf.variable_scope('target_G') as vs:
             if reuse:
                 vs.reuse_variables()
-            target_batch_tf = batch_tf.copy()
-            target_batch_tf['g'] = batch_tf['g_2']
-            target_batch_tf['sg'] = batch_tf['sg_2']
-            self.target_G = self.create_actor_critic_goals(target_batch_tf, net_type='target_G', **self.__dict__)
+            target_batch_G_tf = batch_G_tf.copy()
+            target_batch_G_tf['o'] = batch_G_tf['o_2']
+            target_batch_G_tf['sg'] = batch_G_tf['sg_2']
+            self.target_G = self.create_actor_critic_goals(target_batch_G_tf, net_type='target_G', **self.__dict__)
             vs.reuse_variables()
         assert len(self._vars("main_G")) == len(self._vars("target_G"))
 
         target_G_Q_pi_tf = self.target_G.Q_pi_tf
-        target_G_tf = tf.clip_by_value(batch_tf['rg'] + self.gamma * target_G_Q_pi_tf, *clip_range)
+        target_G_tf = tf.clip_by_value(batch_G_tf['r'] + self.gamma * target_G_Q_pi_tf, *clip_range)
         self.Q_loss_G_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_G_tf) - self.main_G.Q_tf))
 
         self.pi_loss_G_tf = -tf.reduce_mean(self.main_G.Q_pi_tf)
@@ -432,7 +459,8 @@ class DDPG(object):
             map(lambda v: v[0].assign(self.polyak * v[0] + (1. - self.polyak) * v[1]),
                 zip(self.target_G_vars, self.main_G_vars)))
 
-        tf.variables_initializer(self._global_vars('')).run()
+        # tf.variables_initializer(self._global_vars('')).run()
+        self.sess.run(tf.global_variables_initializer())
         self._init_target_net()
 
         # =============================================================================================
