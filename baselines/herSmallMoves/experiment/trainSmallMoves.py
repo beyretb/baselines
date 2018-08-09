@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.append('/home/ben/archived_projects/src/herdora/')
+sys.path.append('/home/ben/small-moves-her/')
 import click
 import numpy as np
 import json
@@ -44,12 +44,12 @@ def train(policy, rollout_worker, evaluator,
             for _ in range(n_batches):
                 policy.train()
             policy.update_target_net()
-            if epoch>1:
-                for _ in range(n_batches):
-                    policy.train_goal()
-                policy.update_target_net_G()
+            # if epoch>1:
+            for _ in range(n_batches):
+                policy.train_goal()
+            policy.update_target_net_G()
         print('Success rate: {}'.format(rollout_worker.current_success_rate()))
-        rollout_worker.goals_random_eps -= 0.1
+        # rollout_worker.goals_random_eps -= 0.1
 
         # test
         # evaluator.clear_history()

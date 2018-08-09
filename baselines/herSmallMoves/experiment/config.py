@@ -16,6 +16,7 @@ DEFAULT_ENV_PARAMS = {
 DEFAULT_PARAMS = {
     # env
     'max_u': 1.,  # max absolute value of actions on different coordinates
+    'max_d': 0.15, # max absolute value of subgoal action (ie: sg = g + NN prediction up to +-0.1)
     # ddpg
     'layers': 3,  # number of layers in the critic/actor networks
     'hidden': 256,  # number of neurons in each hidden layers
@@ -31,7 +32,7 @@ DEFAULT_PARAMS = {
     'relative_goals': False,
     # training
     'n_cycles': 50,  # per epoch
-    'rollout_batch_size': 1, #2,  # per mpi thread
+    'rollout_batch_size': 2, #2,  # per mpi thread
     'n_batches': 40,  # training batches per cycle
     'batch_size': 256,  # per mpi thread, measured in transitions and reduced to even multiple of chunk_length.
     'n_test_rollouts': 10,  # number of test rollouts per epoch, each consists of rollout_batch_size rollouts
@@ -44,7 +45,7 @@ DEFAULT_PARAMS = {
     # exploration
     'random_eps': 0.3,  # percentage of time a random action is taken
     'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of
-    'goals_random_eps': 0.9,  # percentage of time a subgoal is selected randomly vs selected from the G-network
+    'goals_random_eps': 0.3,  # percentage of time a subgoal is selected randomly vs selected from the G-network
     'goals_noise_eps': 0.01,  # std deviation of gaussian noise added to current ag to obtain next g
     # HER
     'replay_strategy': 'future',  # supported modes: future, none
@@ -100,7 +101,7 @@ def prepare_params(kwargs):
                  'goals_network_class',
                  'polyak',
                  'batch_size', 'Q_lr', 'pi_lr',
-                 'norm_eps', 'norm_clip', 'max_u',
+                 'norm_eps', 'norm_clip', 'max_u', 'max_d',
                  'action_l2', 'clip_obs', 'scope', 'relative_goals']:
         ddpg_params[name] = kwargs[name]
         kwargs['_' + name] = kwargs[name]

@@ -217,9 +217,10 @@ class DDPG(object):
                 policy.g_tf: g.reshape(-1, self.dimg),
                 policy.sg_tf: np.zeros((g.size // self.dimg, self.dimg), dtype=np.float32)
             }
-            sg = g + self.sess.run(vals, feed_dict=feed) # network output is relative position to end goal
-            noise = goals_noise_eps * np.random.randn(*g.shape)
-            sg += noise
+            d = self.sess.run(vals, feed_dict=feed)
+            sg = g + d # network output is relative position to end goal
+            # noise = goals_noise_eps * np.random.randn(*g.shape)
+            # sg += noise
             # print('predict: ' + str(sg))
         sg = np.clip(sg, -self.clip_obs, self.clip_obs)
         # print('final: ' + str(sg))
