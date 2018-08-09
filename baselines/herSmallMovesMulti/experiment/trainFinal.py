@@ -45,6 +45,11 @@ def train(policy, rollout_worker, evaluator,
                 policy.train()
             policy.update_target_net()
 
+        for _ in range(n_batches):
+            policy.train_goal()
+        policy.update_target_net_G()
+
+
         # test
         evaluator.clear_history()
         for _ in range(n_test_rollouts):
@@ -157,7 +162,8 @@ def launch(
         'T': params['T'],
     }
 
-    for name in ['T', 'rollout_batch_size', 'gamma', 'noise_eps', 'random_eps']:
+    for name in ['T', 'rollout_batch_size', 'gamma', 'noise_eps', 'random_eps', 'sg_regenerate',
+                 'goals_noise_eps', 'goals_random_eps', 'n_subgoals', 'n_steps_per_subgoal']:
         rollout_params[name] = params[name]
         eval_params[name] = params[name]
 
