@@ -71,7 +71,11 @@ class HumanOutputFormat(KVWriter, SeqWriter):
             # Flush the output to the file
             self.file.flush()
         else:
-            bot_facebook_send(client, '\n'.join(lines) + '\n')
+            try:
+                bot_facebook_send(client, '\n'.join(lines) + '\n')
+            except:
+                print('couldn t send facebook message')
+                pass
 
 
     def _truncate(self, s):
