@@ -35,6 +35,8 @@ def train(policy, rollout_worker, evaluator,
 
     logger.info("Training...")
     best_success_rate = -1
+    treshold = 0.95
+    counter = 0
     for epoch in range(n_epochs):
         # train
         rollout_worker.clear_history()
@@ -85,6 +87,10 @@ def train(policy, rollout_worker, evaluator,
         MPI.COMM_WORLD.Bcast(root_uniform, root=0)
         if rank != 0:
             assert local_uniform[0] != root_uniform[0]
+        if evaluator.current_success_rate()>=treshold:
+            counter+=1
+            if counter>10:
+                break
 
 
 def launch(
