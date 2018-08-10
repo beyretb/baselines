@@ -4,7 +4,8 @@ import numpy as np
 
 
 class ReplayBuffer:
-    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions):
+    def __init__(self, buffer_shapes, size_in_transitions, T, sample_transitions, sample_goal_transitions,
+                 n_subgoals, sample_method, reward_type):
         """Creates a replay buffer.
 
         Args:
@@ -18,10 +19,23 @@ class ReplayBuffer:
         self.size = size_in_transitions // T
         self.T = T
         self.sample_transitions = sample_transitions
+        self.sample_goal_transitions = sample_goal_transitions
+        self.n_subgoals = n_subgoals
+        self.n_steps_per_subgoal = int(T/n_subgoals)
+        self.sample_method = sample_method
+        self.reward_type = reward_type
+
 
         # self.buffers is {key: array(size_in_episodes x T or T+1 x dim_key)}
         self.buffers = {key: np.empty([self.size, *shape])
                         for key, shape in buffer_shapes.items()}
+
+        self.buffers_G = {'ag': np.empty([self.size, n_subgoals + 1, buffer_shapes['g'][1]]),
+                          'g': np.empty([self.size, n_subgoals, buffer_shapes['g'][1]]),
+                          'o': np.empty([self.size, n_subgoals, buffer_shapes['o'][1]]),
+                          'r': np.empty([self.size, n_subgoals]),
+                          'sg': np.empty([self.size, n_subgoals, buffer_shapes['g'][1]]),
+                          'sg_success': np.empty([self.size, n_subgoals])}
 
         # memory management
         self.current_size = 0
@@ -47,10 +61,27 @@ class ReplayBuffer:
         buffers['o_2'] = buffers['o'][:, 1:, :]
         buffers['ag_2'] = buffers['ag'][:, 1:, :]
 
-        transitions = self.sample_transitions(buffers, batch_size)
+        transitions = self.sample_transitions(buffers, batch_size, self.n_subgoals)
 
         for key in (['r', 'o_2', 'ag_2'] + list(self.buffers.keys())):
             assert key in transitions, "key %s missing from transitions" % key
+
+        return transitions
+
+    def sample_goal(self, batch_size):
+        """Returns a dict {key: array(batch_size x shapes[key])}
+        """
+        buffers = {}
+
+        with self.lock:
+            assert self.current_size > 0
+            for key in self.buffers_G.keys():
+                buffers[key] = self.buffers_G[key][:self.current_size]
+
+        buffers['o_2'] = buffers['o'][1:, :, :]
+        buffers['sg_2'] = buffers['sg'][1:, :, :]
+
+        transitions = self.sample_goal_transitions(buffers, batch_size, self.sample_method, self.reward_type)
 
         return transitions
 
@@ -61,13 +92,27 @@ class ReplayBuffer:
         assert np.all(np.array(batch_sizes) == batch_sizes[0])
         batch_size = batch_sizes[0]
 
+        rewards = episode_batch.pop('r')
+        sg_success = episode_batch.pop('sg_success')
+
         with self.lock:
             idxs = self._get_storage_idx(batch_size)
 
             # load inputs into buffers
             for key in self.buffers.keys():
                 self.buffers[key][idxs] = episode_batch[key]
-
+            self.buffers_G['g'][idxs] = episode_batch['g'][:,
+                                        np.array(range(self.n_subgoals)) * self.n_steps_per_subgoal]
+            self.buffers_G['o'][idxs] = episode_batch['o'][:,
+                                        np.array(range(self.n_subgoals)) * self.n_steps_per_subgoal]
+            self.buffers_G['sg'][idxs] = episode_batch['sg'][:,
+                                         np.array(range(self.n_subgoals)) * self.n_steps_per_subgoal]
+            self.buffers_G['ag'][idxs] = episode_batch['ag'][:,
+                                         np.array(range(self.n_subgoals + 1)) * self.n_steps_per_subgoal]
+            for i in range(self.n_subgoals):
+                self.buffers_G['r'][idxs, i] = np.sum(
+                    rewards[:, i * self.n_steps_per_subgoal:(i + 1) * self.n_steps_per_subgoal], axis=1).copy()
+            self.buffers_G['sg_success'][idxs] = sg_success
             self.n_transitions_stored += batch_size * self.T
 
     def get_current_episode_size(self):

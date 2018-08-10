@@ -271,7 +271,7 @@ class DDPG(object):
         transitions['sg'] = self._preprocess_sg(sg)
         transitions['sg_2'] = self._preprocess_sg(sg)
         # transitions['sg_2'] = self._preprocess_sg(sg_2,g)
-        transitions['rg'] = transitions['r']
+        # transitions['rg'] = transitions['r']
 
         transitions_batch = [transitions[key] for key in self.stage_shapes.keys()]
         return transitions_batch
@@ -444,7 +444,7 @@ class DDPG(object):
         self.Q_loss_G_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_G_tf) - self.main_G.Q_tf))
 
         self.pi_loss_G_tf = -tf.reduce_mean(self.main_G.Q_pi_tf)
-        self.pi_loss_G_tf += self.action_l2 * tf.reduce_mean(tf.square(self.main_G.pi_tf))
+        self.pi_loss_G_tf += self.action_l2 * tf.reduce_mean(tf.square(self.main_G.pi_tf / self.max_d))
 
         Q_grads_G_tf = tf.gradients(self.Q_loss_G_tf, self._vars('main_G/Q'))
         pi_grads_G_tf = tf.gradients(self.pi_loss_G_tf, self._vars('main_G/pi'))
@@ -459,7 +459,7 @@ class DDPG(object):
 
         self.main_G_vars = self._vars('main_G/Q') + self._vars('main_G/pi')
         self.target_G_vars = self._vars('target_G/Q') + self._vars('target_G/pi')
-        self.stats_G_vars = self._global_vars('g_stats')
+        self.stats_G_vars = self._global_vars('o_stats') + self._global_vars('g_stats')
         self.init_target_G_net_op = list(
             map(lambda v: v[0].assign(v[1]), zip(self.target_G_vars, self.main_G_vars)))
         self.update_target_G_net_op = list(

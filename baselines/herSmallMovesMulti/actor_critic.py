@@ -1,5 +1,5 @@
 import tensorflow as tf
-from baselines.her.util import store_args, nn
+from baselines.herSmallMovesMulti.util import store_args, nn
 
 
 class ActorCritic:
@@ -16,8 +16,8 @@ class ActorCritic:
             dimu (int): the dimension of the actions
             max_u (float): the maximum magnitude of actions; action outputs will be scaled
                 accordingly
-            o_stats (baselines.her.Normalizer): normalizer for observations
-            g_stats (baselines.her.Normalizer): normalizer for goals
+            o_stats (baselines.herSmallMovesMulti.Normalizer): normalizer for observations
+            g_stats (baselines.herSmallMovesMulti.Normalizer): normalizer for goals
             hidden (int): number of hidden units that should be used in hidden layers
             layers (int): number of hidden layers
         """
@@ -58,14 +58,15 @@ class ActorCriticGoals:
             dimu (int): the dimension of the actions
             max_u (float): the maximum magnitude of actions; action outputs will be scaled
                 accordingly
-            o_stats (baselines.her.Normalizer): normalizer for observations
-            g_stats (baselines.her.Normalizer): normalizer for goals
+            o_stats (baselines.herSmallMovesMulti.Normalizer): normalizer for observations
+            g_stats (baselines.herSmallMovesMulti.Normalizer): normalizer for goals
             hidden (int): number of hidden units that should be used in hidden layers
             layers (int): number of hidden layers
         """
         self.o_tf = inputs_tf['o']
         self.g_tf = inputs_tf['g']
-        self.u_tf = inputs_tf['u']
+        self.sg_tf = inputs_tf['sg']
+        self.d_tf = self.sg_tf - self.g_tf
 
         # Prepare inputs for actor and critic.
         o = self.o_stats.normalize(self.o_tf)
@@ -74,13 +75,12 @@ class ActorCriticGoals:
 
         # Networks.
         with tf.variable_scope('pi'):
-            self.pi_tf = self.max_u * tf.tanh(nn(
-                input_pi, [self.hidden] * self.layers + [self.dimu]))
+            self.pi_tf = self.max_d * tf.tanh(nn(input_pi, [self.hidden] * self.layers + [self.dimg]))
         with tf.variable_scope('Q'):
             # for policy training
-            input_Q = tf.concat(axis=1, values=[o, g, self.pi_tf / self.max_u])
+            input_Q = tf.concat(axis=1, values=[o, g, self.pi_tf / self.max_d])
             self.Q_pi_tf = nn(input_Q, [self.hidden] * self.layers + [1])
             # for critic training
-            input_Q = tf.concat(axis=1, values=[o, g, self.u_tf / self.max_u])
+            input_Q = tf.concat(axis=1, values=[o, g, self.d_tf / self.max_d])
             self._input_Q = input_Q  # exposed for tests
             self.Q_tf = nn(input_Q, [self.hidden] * self.layers + [1], reuse=True)

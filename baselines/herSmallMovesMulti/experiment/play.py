@@ -4,8 +4,8 @@ import pickle
 
 from baselines import logger
 from baselines.common import set_global_seeds
-import baselines.her.experiment.config as config
-from baselines.her.rollout import RolloutWorker
+import baselines.herSmallMovesMulti.experiment.config as config
+from baselines.herSmallMovesMulti.rollout import RolloutWorker
 
 
 @click.command()

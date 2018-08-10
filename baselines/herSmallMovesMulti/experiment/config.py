@@ -2,8 +2,8 @@ import numpy as np
 import gym
 
 from baselines import logger
-from baselines.her.ddpg import DDPG
-from baselines.her.her import make_sample_her_transitions
+from baselines.herSmallMovesMulti.ddpg import DDPG
+from baselines.herSmallMovesMulti.her import make_sample_her_transitions, make_sample_her_goals_transitions
 
 
 DEFAULT_ENV_PARAMS = {
@@ -16,10 +16,12 @@ DEFAULT_ENV_PARAMS = {
 DEFAULT_PARAMS = {
     # env
     'max_u': 1.,  # max absolute value of actions on different coordinates
+    'max_d': 0.15, # max absolute value of subgoal action (ie: sg = g + NN prediction up to +-0.1)
     # ddpg
     'layers': 3,  # number of layers in the critic/actor networks
     'hidden': 256,  # number of neurons in each hidden layers
-    'network_class': 'baselines.her.actor_critic:ActorCritic',
+    'network_class': 'baselines.herSmallMovesMulti.actor_critic:ActorCritic',
+    'goals_network_class': 'baselines.herSmallMovesMulti.actor_critic:ActorCriticGoals',
     'Q_lr': 0.001,  # critic learning rate
     'pi_lr': 0.001,  # actor learning rate
     'buffer_size': int(1E6),  # for experience replay
@@ -30,14 +32,21 @@ DEFAULT_PARAMS = {
     'relative_goals': False,
     # training
     'n_cycles': 50,  # per epoch
-    'rollout_batch_size': 1, #2,  # per mpi thread
+    'rollout_batch_size': 2, #2,  # per mpi thread
     'n_batches': 40,  # training batches per cycle
     'batch_size': 256,  # per mpi thread, measured in transitions and reduced to even multiple of chunk_length.
     'n_test_rollouts': 10,  # number of test rollouts per epoch, each consists of rollout_batch_size rollouts
     'test_with_polyak': False,  # run test episodes with the target network
+    'n_subgoals': 2,  # number of subgoals for an episode (WARNING: n_subgoals==1 means no subgoal, just end goal)
+    'sg_regenerate': True,  # for sg generator at rollout, if true regenerate sg_t if ag_{t-1}!=sg{t-1}, otherwise
+                            # stick to the initially planned sequence of subgoals
+    'reward_type': 1,
+    'sample_method': 1,
     # exploration
     'random_eps': 0.3,  # percentage of time a random action is taken
-    'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of max_u
+    'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of
+    'goals_random_eps': 0.3,  # percentage of time a subgoal is selected randomly vs selected from the G-network
+    'goals_noise_eps': 0.01,  # std deviation of gaussian noise added to current ag to obtain next g
     # HER
     'replay_strategy': 'future',  # supported modes: future, none
     'replay_k': 4,  # number of additional goals used for replay, only used if off_policy_data=future
@@ -74,6 +83,12 @@ def prepare_params(kwargs):
     tmp_env = cached_make_env(kwargs['make_env'])
     assert hasattr(tmp_env, '_max_episode_steps')
     kwargs['T'] = tmp_env._max_episode_steps
+    kwargs['T'] = int(np.ceil(kwargs['T']/kwargs['n_subgoals'])*kwargs['n_subgoals'])
+    if kwargs['T']%kwargs['n_subgoals']==0:
+        kwargs['n_steps_per_subgoal'] = int(kwargs['T']/kwargs['n_subgoals'])
+    else:
+        raise ValueError('Espisode length {} is not a multiple of the number of subgoals {}'.
+                         format(kwargs['T'],kwargs['n_subgoals']))
     tmp_env.reset()
     kwargs['max_u'] = np.array(kwargs['max_u']) if isinstance(kwargs['max_u'], list) else kwargs['max_u']
     kwargs['gamma'] = 1. - 1. / kwargs['T']
@@ -83,9 +98,10 @@ def prepare_params(kwargs):
         del kwargs['lr']
     for name in ['buffer_size', 'hidden', 'layers',
                  'network_class',
+                 'goals_network_class',
                  'polyak',
                  'batch_size', 'Q_lr', 'pi_lr',
-                 'norm_eps', 'norm_clip', 'max_u',
+                 'norm_eps', 'norm_clip', 'max_u', 'max_d',
                  'action_l2', 'clip_obs', 'scope', 'relative_goals']:
         ddpg_params[name] = kwargs[name]
         kwargs['_' + name] = kwargs[name]
@@ -107,17 +123,22 @@ def configure_her(params):
     def reward_fun(ag_2, g, info):  # vectorized
         return env.compute_reward(achieved_goal=ag_2, desired_goal=g, info=info)
 
+    def reward_function_subgoals(ag_2, sg, info):  # vectorized
+        return env.compute_reward(achieved_goal=ag_2, desired_goal=sg, info=info)
+
     # Prepare configuration for HER.
     her_params = {
-        'reward_fun': reward_fun,
+        # 'reward_fun': reward_fun, # reward function for regular HER
+        'reward_fun':reward_function_subgoals,  # same but for subgoals
     }
     for name in ['replay_strategy', 'replay_k']:
         her_params[name] = params[name]
         params['_' + name] = her_params[name]
         del params[name]
     sample_her_transitions = make_sample_her_transitions(**her_params)
+    sample_her_goals_transitions = make_sample_her_goals_transitions(**her_params)
 
-    return sample_her_transitions
+    return sample_her_transitions, sample_her_goals_transitions
 
 
 def simple_goal_subtract(a, b):
@@ -126,7 +147,7 @@ def simple_goal_subtract(a, b):
 
 
 def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
-    sample_her_transitions = configure_her(params)
+    sample_her_transitions, sample_her_goals_transitions = configure_her(params)
     # Extract relevant parameters.
     gamma = params['gamma']
     rollout_batch_size = params['rollout_batch_size']
@@ -139,12 +160,17 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
     env.reset()
     ddpg_params.update({'input_dims': input_dims,  # agent takes an input observations
                         'T': params['T'],
+                        'n_steps_per_subgoal': params['n_steps_per_subgoal'],
                         'clip_pos_returns': True,  # clip positive returns
                         'clip_return': (1. / (1. - gamma)) if clip_return else np.inf,  # max abs of return
                         'rollout_batch_size': rollout_batch_size,
                         'subtract_goals': simple_goal_subtract,
                         'sample_transitions': sample_her_transitions,
+                        'sample_goal_transitions': sample_her_goals_transitions,
                         'gamma': gamma,
+                        'n_subgoals': params['n_subgoals'],
+                        'reward_type': params['reward_type'],
+                        'sample_method': params['sample_method'],
                         })
     ddpg_params['info'] = {
         'env_name': params['env_name'],
@@ -162,6 +188,8 @@ def configure_dims(params):
         'o': obs['observation'].shape[0],
         'u': env.action_space.shape[0],
         'g': obs['desired_goal'].shape[0],
+        'ag': obs['desired_goal'].shape[0],
+        'sg': obs['desired_goal'].shape[0]
     }
     for key, value in info.items():
         value = np.array(value)
