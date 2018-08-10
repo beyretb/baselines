@@ -28,7 +28,7 @@ for e in params:
     try:
         env = e[0]
         n_epochs = e[1]
-        launch(env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return, fb)
+        launch(env, logdir+env+'/', n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return, fb)
     except:
         print('{} not OK'.format(e[0]))
         continue
