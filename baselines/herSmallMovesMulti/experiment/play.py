@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/home/ben/small-moves-her/')
 import click
 import numpy as np
 import pickle
@@ -6,7 +8,6 @@ from baselines import logger
 from baselines.common import set_global_seeds
 import baselines.herSmallMovesMulti.experiment.config as config
 from baselines.herSmallMovesMulti.rollout import RolloutWorker
-
 
 @click.command()
 @click.argument('policy_file', type=str)
@@ -37,6 +38,10 @@ def main(policy_file, seed, n_test_rollouts, render):
         'compute_Q': True,
         'rollout_batch_size': 1,
         'render': bool(render),
+        'n_subgoals':2,
+        'n_steps_per_subgoal':int(params['T']/2),
+        'sg_regenerate': True,
+        'sample_method': 2
     }
 
     for name in ['T', 'gamma', 'noise_eps', 'random_eps']:

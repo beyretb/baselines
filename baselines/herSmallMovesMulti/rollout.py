@@ -5,7 +5,7 @@ import pickle
 from mujoco_py import MujocoException
 
 from baselines.herSmallMovesMulti.util import convert_episode_to_batch_major, store_args
-
+import time
 
 class RolloutWorker:
 

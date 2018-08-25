@@ -1,7 +1,8 @@
 import click
 import numpy as np
 import pickle
-
+import sys
+sys.path.append('/home/ben/small-moves-her/')
 from baselines import logger
 from baselines.common import set_global_seeds
 import baselines.her.experiment.config as config
