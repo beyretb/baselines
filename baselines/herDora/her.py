@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
     """Creates a sample function that can be used for HER experience replay.
 
@@ -16,7 +15,7 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
     else:  # 'replay_strategy' == 'none'
         future_p = 0
 
-    def _sample_her_transitions(episode_batch, batch_size_in_transitions):
+    def _sample_her_transitions(episode_batch, batch_size_in_transitions, agent, add_bonus=False):
         """episode_batch is {key: array(buffer_size x T x dim_key)}
         """
         T = episode_batch['u'].shape[1]
@@ -52,6 +51,17 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
         reward_params = {k: transitions[k] for k in ['ag_2', 'g']}
         reward_params['info'] = info
         transitions['r'] = reward_fun(**reward_params)
+
+        if add_bonus:
+            # Add exploration bonus
+            feed = {
+                agent.target_e.o_tf: transitions['o'],
+                agent.target_e.g_tf: transitions['g'],
+                agent.target_e.u_tf: transitions['u']
+            }
+            e_values = agent.sess.run([agent.target_e.E_tf], feed_dict=feed)
+            e_bonus = agent.beta/ np.sqrt(-np.log(e_values)+0.01).reshape(-1,)
+            transitions['r'] += e_bonus
 
         transitions = {k: transitions[k].reshape(batch_size, *transitions[k].shape[1:])
                        for k in transitions.keys()}

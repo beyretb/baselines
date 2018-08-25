@@ -84,6 +84,14 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
             t_samples = np.random.randint(n_subgoals, size=batch_size)
             transitions = {key: episode_batch[key][episode_idxs, t_samples].copy()
                            for key in episode_batch.keys()}
+        elif sample_method==2:
+            episode_idxs = np.random.randint(0, rollout_batch_size, batch_size)
+            t_samples = np.random.randint(n_subgoals, size=batch_size)
+            transitions = {key: episode_batch[key][episode_idxs, t_samples].copy()
+                           for key in episode_batch.keys()}
+            her_indexes = np.where(np.random.uniform(size=batch_size) < future_p)
+            # In this case we replace the subgoal by the actual achieeved goal in hindsight
+            transitions['sg'][her_indexes] = episode_batch['ag'][episode_idxs[her_indexes],(t_samples+1)[her_indexes]]
 
 
 

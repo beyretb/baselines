@@ -37,7 +37,7 @@ DEFAULT_PARAMS = {
     'batch_size': 256,  # per mpi thread, measured in transitions and reduced to even multiple of chunk_length.
     'n_test_rollouts': 10,  # number of test rollouts per epoch, each consists of rollout_batch_size rollouts
     'test_with_polyak': False,  # run test episodes with the target network
-    'n_subgoals': 2,  # number of subgoals for an episode (WARNING: n_subgoals==1 means no subgoal, just end goal)
+    'n_subgoals': 10,  # number of subgoals for an episode (WARNING: n_subgoals==1 means no subgoal, just end goal)
     'sg_regenerate': True,  # for sg generator at rollout, if true regenerate sg_t if ag_{t-1}!=sg{t-1}, otherwise
                             # stick to the initially planned sequence of subgoals
     'reward_type': 1,

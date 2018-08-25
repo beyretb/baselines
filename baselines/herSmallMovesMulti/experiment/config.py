@@ -41,7 +41,7 @@ DEFAULT_PARAMS = {
     'sg_regenerate': True,  # for sg generator at rollout, if true regenerate sg_t if ag_{t-1}!=sg{t-1}, otherwise
                             # stick to the initially planned sequence of subgoals
     'reward_type': 1,
-    'sample_method': 1,
+    'sample_method': 2,
     # exploration
     'random_eps': 0.3,  # percentage of time a random action is taken
     'noise_eps': 0.2,  # std of gaussian noise added to not-completely-random actions as a percentage of
