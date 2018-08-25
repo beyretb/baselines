@@ -292,9 +292,6 @@ class DDPG(object):
         # loss function for Q
         target_Q_pi_tf = self.target.Q_pi_tf
         clip_range = (-self.clip_return, 0. if self.clip_pos_returns else np.inf)
-        # target y_i= r + gamma*Q part of the Bellman equation (with returns clipped if necessary) + DORA term:
-        # target_tf = tf.clip_by_value(batch_tf['r'] + tf.divide(0.5, tf.sqrt(-tf.log(self.main_e.E_tf))) +
-        #                             self.gamma * target_Q_pi_tf, *clip_range)
         target_tf = tf.clip_by_value(batch_tf['r'] + self.gamma * target_Q_pi_tf, *clip_range)
         # loss function for Q_tf where we exclude target_tf from the gradient computation:
         self.Q_loss_tf = tf.reduce_mean(tf.square(tf.stop_gradient(target_tf) - self.main.Q_tf))

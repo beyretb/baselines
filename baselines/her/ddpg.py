@@ -208,7 +208,6 @@ class DDPG(object):
             self.stage_batch()
         critic_loss, actor_loss, Q_grad, pi_grad = self._grads()
         self._update(Q_grad, pi_grad)
-        print(critic_loss)
         return critic_loss, actor_loss
 
     def _init_target_net(self):
