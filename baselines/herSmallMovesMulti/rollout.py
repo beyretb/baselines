@@ -133,6 +133,8 @@ class RolloutWorker:
                         if self.render:
                             self.envs[i].env.sg = subgoals[t][i]
                             self.envs[i].render()
+                            if t==0:
+                                self.envs[i].env.viewer._paused = True
                     except MujocoException as e:
                         return self.generate_rollouts()
 

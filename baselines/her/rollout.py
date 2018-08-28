@@ -114,6 +114,8 @@ class RolloutWorker:
                         info_values[idx][t, i] = info[key]
                     if self.render:
                         self.envs[i].render()
+                        if t == 0:
+                            self.envs[i].env.viewer._paused = True
                 except MujocoException as e:
                     return self.generate_rollouts()
 
