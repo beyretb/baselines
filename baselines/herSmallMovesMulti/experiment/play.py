@@ -31,6 +31,7 @@ def main(policy_file, seed, n_test_rollouts, render):
     config.log_params(params, logger=logger)
 
     dims = config.configure_dims(params)
+    n_subgoals = policy.n_subgoals
 
     eval_params = {
         'exploit': True,
@@ -38,8 +39,8 @@ def main(policy_file, seed, n_test_rollouts, render):
         'compute_Q': True,
         'rollout_batch_size': 1,
         'render': bool(render),
-        'n_subgoals':2,
-        'n_steps_per_subgoal':int(params['T']/2),
+        'n_subgoals':n_subgoals,
+        'n_steps_per_subgoal':int(params['T']/n_subgoals),
         'sg_regenerate': True,
         'sample_method': 2
     }
