@@ -43,13 +43,16 @@ def main(policy_file, seed, n_test_rollouts, render):
     vals = [policy.Q_tf]
 
     mesh = np.meshgrid(np.linspace(1.1,1.5,20),np.linspace(0.45,1.05,20))
-    res = np.zeros((50,50))
+    N=50
+    res = np.zeros((N,N))
     i=0
     j=0
-    for x in np.linspace(1.1,1.5,50):
+    for x in np.linspace(1.1,1.5,N):
         j=0
-        for y in np.linspace(0.45,1.05,50):
+        for y in np.linspace(0.45,1.05,N):
             sg = np.array([[x,y,0.42]])
+            o[0, 3] = x
+            o[0, 4] = y
             feed = {
                 policy.o_tf: o.reshape(-1, policy_opt.dimo),
                 policy.g_tf: g.reshape(-1, policy_opt.dimg),
@@ -62,7 +65,11 @@ def main(policy_file, seed, n_test_rollouts, render):
         print(i)
 
     plt.clf()
-    plt.imshow(res)
+    im= plt.imshow(res.T, extent=[0.45,1.05,1.5,1.1])
+    clb = plt.colorbar(im,fraction=0.1)
+    clb.set_label('G-values')#, rotation=270)
+    plt.xlabel('X')
+    plt.ylabel('Y')
     plt.show()
 
     print('ok')

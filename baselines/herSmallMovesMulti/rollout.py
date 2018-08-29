@@ -75,7 +75,8 @@ class RolloutWorker:
 
         # generate episodes
         subgoals = np.zeros((self.n_subgoals * self.n_steps_per_subgoal, self.rollout_batch_size, self.dims['g']))
-        subgoals[(self.n_subgoals - 1) * self.n_steps_per_subgoal:, :, :] = self.g.copy()
+        # subgoals[(self.n_subgoals - 1) * self.n_steps_per_subgoal:, :, :] = self.g.copy()
+        subgoals[:, :, :] = self.g.copy()
         for n in range(self.n_subgoals-1,0,-1):
             sg = self.policy.get_subgoal(o, ag, subgoals[(n+1)*self.n_steps_per_subgoal-1],
                                goals_noise_eps=self.goals_noise_eps if not self.exploit else 0.,
